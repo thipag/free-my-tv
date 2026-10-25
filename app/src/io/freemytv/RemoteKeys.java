@@ -54,6 +54,19 @@ final class RemoteKeys {
                 || event.getKeyCode() == KeyEvent.KEYCODE_SETTINGS);
     }
 
+    /** Route the TCL microphone/search key to Free My TV's source-aggregating search. */
+    static boolean tclVoiceSearchKey(KeyEvent event) {
+        if (!TCL || event == null) return false;
+        int source = event.getSource();
+        if ((source & InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD
+                || (source & InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK) return false;
+        int code = event.getKeyCode();
+        return code == KeyEvent.KEYCODE_VOICE_ASSIST || code == KeyEvent.KEYCODE_ASSIST
+                || code == KeyEvent.KEYCODE_SEARCH;
+    }
+
+    static void openVoiceSearch(Context context) { VoiceSearchActivity.open(context); }
+
     static boolean homeKey(KeyEvent event) {
         return TCL && "G15".equalsIgnoreCase(Build.DEVICE) && event != null
                 && event.getKeyCode() == KeyEvent.KEYCODE_HOME;

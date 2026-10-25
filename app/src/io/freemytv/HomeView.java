@@ -2137,8 +2137,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 if (s != null) setShelf(s);
                 setStatusItems(st);
                 setDrawerItems(d);
-                if (o != null && !sheetOpen) setOthers(o);
-                else if (o != null) appsStale = true;   // All Apps is open: its list comes next time
+                if (o != null) setOthers(o);   // Finish the first-load population even if All Apps opened in the meantime.
             });
         });
     }

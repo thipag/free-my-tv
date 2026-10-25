@@ -59,6 +59,18 @@ final class Symbols {
 
     /** Draws centered at (cx, cy) in the given color (lighter, translucent parts of the symbol stay lighter). */
     static void draw(Context c, Canvas canvas, String name, float cx, float cy, float pointSize, int color) {
+        if ("search".equals(name)) {
+            synchronized (PAINT) {
+                PAINT.setColor(color); PAINT.setStyle(Paint.Style.STROKE);
+                PAINT.setStrokeWidth(Math.max(1, pointSize * 0.13f));
+                float radius = pointSize * 0.29f, centerX = cx - pointSize * 0.07f, centerY = cy - pointSize * 0.07f;
+                canvas.drawCircle(centerX, centerY, radius, PAINT);
+                canvas.drawLine(centerX + radius * 0.68f, centerY + radius * 0.68f,
+                        cx + pointSize * 0.38f, cy + pointSize * 0.38f, PAINT);
+                PAINT.setStyle(Paint.Style.FILL);
+            }
+            return;
+        }
         Bitmap b = get(c, name);
         if (b == null) return;
         synchronized (PAINT) {   // card loading (another thread) also draws symbols

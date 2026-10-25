@@ -4,7 +4,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
 import android.os.SystemClock;
-import android.provider.Settings;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -246,10 +245,10 @@ final class HomeMode {
         ModeJob.schedule(c, ModeJob.APPLY, mode, 0);
     }
 
-    /** Opens Android TV account/sync settings without depending on the Google TV home app. */
+    /** Opens the existing Android TV Google account screen without depending on LauncherX or requesting another login. */
     static void openLauncherProfile(Context context) {
-        Intent i = new Intent(Settings.ACTION_SYNC_SETTINGS).setPackage("com.android.tv.settings")
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        Intent i = new Intent().setComponent(new android.content.ComponentName("com.android.tv.settings",
+                "com.google.android.tv.settings.AccountActivity")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         try { context.startActivity(i); }
         catch (RuntimeException e) { AppLog.w("TV account settings: " + e.getClass().getSimpleName()); }
     }
@@ -340,6 +339,7 @@ final class HomeMode {
     }
 
     private static final String NOW_PLAYING = PKG + "/" + PKG + ".NowPlaying";
+    private static final String TV_NOTIFICATIONS = PKG + "/" + PKG + ".TvNotificationListener";
 
     /**
      * Home Settings' Now Playing widget reads what apps play through our notification listener, which could read every
@@ -384,6 +384,12 @@ final class HomeMode {
             works = NowPlaying.allowed(c);
         }
         Capabilities.prove(c, Capabilities.LISTENER, works);
+    }
+
+    /** Recent-notification panel permission; active only while the custom TV home is selected. */
+    private static void tvNotifications(Adb adb, boolean on) throws IOException {
+        String out = adb.shell("cmd notification " + (on ? "allow_listener " : "disallow_listener ") + TV_NOTIFICATIONS).trim();
+        AppLog.w("TV notifications " + (on ? "on" : "off") + (out.isEmpty() ? "" : ": " + out));
     }
 
     // MARK: - Switches (main process, from ModeJob)
@@ -513,6 +519,8 @@ final class HomeMode {
                     AppLog.w("remote buttons service: " + e.getMessage());
                 }
             }
+            try { tvNotifications(adb, true); }
+            catch (IOException e) { AppLog.w("TV notifications listener: " + e.getMessage()); }
             notice(c, Ui.trf("Free My TV is on: new home screen and screensaver, {n} apps turned off.", "n", disabled.size()));
             busy(c, Ui.tr("Measuring Free My TV…"));
             measureHomeTime(c, adb, FREE);
@@ -576,6 +584,8 @@ final class HomeMode {
             } catch (IOException e) {
                 AppLog.w("now playing: " + e.getMessage());
             }
+            try { tvNotifications(adb, false); }
+            catch (IOException e) { AppLog.w("TV notifications listener: " + e.getMessage()); }
             s = state(c);
             s.put("mode", ORIGINAL).put("since", System.currentTimeMillis()).put("homeReverted", false)
                     .put("disabled", new JSONArray(failed)).remove("keptOff");
@@ -683,6 +693,8 @@ final class HomeMode {
                 } catch (IOException e) {
                     AppLog.w("now playing: " + e.getMessage());
                 }
+                try { tvNotifications(adb, false); }
+                catch (IOException e) { AppLog.w("TV notifications listener: " + e.getMessage()); }
                 s.put("homeReverted", true).put("disabled", kept);
                 save(app, s);
                 notice(app, Ui.tr("Free My TV's home screen crashed 3 times in a row; I switched back to the original one."));
@@ -716,6 +728,8 @@ final class HomeMode {
                 } catch (IOException e) {
                     AppLog.w("now playing: " + e.getMessage());
                 }
+                try { tvNotifications(adb, !s.optBoolean("homeReverted")); }
+                catch (IOException e) { AppLog.w("TV notifications listener: " + e.getMessage()); }
                 Set<String> present = packages(adb, "");
                 Set<String> disabledNow = packages(adb, "-d");
                 Set<String> owners = wifiOwners(adb);

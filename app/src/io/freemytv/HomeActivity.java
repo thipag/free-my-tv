@@ -84,6 +84,11 @@ public class HomeActivity extends Activity {
     }
 
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
+        if (RemoteKeys.tclVoiceSearchKey(event)) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0)
+                RemoteKeys.openVoiceSearch(this);
+            return true;
+        }
         if (RemoteKeys.homeKey(event)) {
             if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0)
                 RemoteKeys.openFreeHome(this);

@@ -8,6 +8,7 @@ import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.text.format.DateFormat;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.Window;
@@ -48,6 +49,8 @@ public final class TvQuickPanelActivity extends Activity {
         private final String[] names = {"Picture", "Sound", "Notifications", "Inputs", "Network", "Developer options", "TV Settings"};
         private final String[] icons = {"tv_settings", "speaker", "bell", "hdmi", "cast", "settings", "apps"};
         private int focus;
+        private int notificationOffset;
+        private boolean notificationsPage;
         private float k, left, top, width, height, rowTop;
 
         Panel() {
@@ -65,7 +68,7 @@ public final class TvQuickPanelActivity extends Activity {
             c.save();
             c.translate(ox, oy);
             c.scale(k, k);
-            left = 1320; top = 72; width = 540; height = 746; rowTop = 218;
+            left = 1320; top = 72; width = 540; height = 746; rowTop = 188;
 
             p.setColor(0xEEECF3F9);
             p.setShadowLayer(34, 0, 18, 0x66000000);
@@ -78,10 +81,15 @@ public final class TvQuickPanelActivity extends Activity {
             c.drawRoundRect(r, 34, 34, p);
             p.setStyle(Paint.Style.FILL);
 
-            text(c, Ui.tr("Quick Settings"), left + 42, top + 62, 34, 0xFF172033, true);
-            text(c, Ui.tr("Picture, sound and TV controls"), left + 42, top + 98, 18, 0xFF647184, false);
+            text(c, Ui.tr(notificationsPage ? "Notifications" : "Quick Settings"), left + 42, top + 62, 34, 0xFF172033, true);
             p.setColor(0xFFC8D2DE);
-            c.drawRect(left + 36, top + 124, left + width - 36, top + 126, p);
+            c.drawRect(left + 36, top + 88, left + width - 36, top + 90, p);
+
+            if (notificationsPage) {
+                drawNotifications(c);
+                c.restore();
+                return;
+            }
 
             float rowH = 78;
             for (int i = 0; i < COUNT; i++) {
@@ -99,8 +107,54 @@ public final class TvQuickPanelActivity extends Activity {
                     c.drawRect(left + 108, y + rowH - 1, left + width - 36, y + rowH, p);
                 }
             }
-            text(c, Ui.tr("OK opens · Back closes"), left + 42, top + height - 22, 16, 0xFF758194, false);
             c.restore();
+        }
+
+        private void drawNotifications(Canvas c) {
+            postInvalidateDelayed(3000);
+            java.util.List<NotificationCenter.Entry> items = NotificationCenter.recent();
+            notificationOffset = Math.min(notificationOffset, Math.max(0, items.size() - 1));
+            int shown = Math.min(6, items.size() - notificationOffset);
+            if (shown == 0) {
+                text(c, Ui.tr("No recent notifications"), left + 42, top + 170, 24, 0xFF647184, false);
+                return;
+            }
+            float first = top + 112, rowH = 100;
+            focus = Math.min(focus, shown - 1);
+            for (int i = 0; i < shown; i++) {
+                NotificationCenter.Entry item = items.get(notificationOffset + i);
+                float y = first + i * rowH;
+                boolean selected = i == focus;
+                if (selected) {
+                    p.setColor(0xFF5B9FD3);
+                    r.set(left + 20, y + 2, left + width - 20, y + rowH - 5);
+                    c.drawRoundRect(r, 18, 18, p);
+                }
+                int fg = selected ? Color.WHITE : 0xFF263346;
+                int secondary = selected ? 0xFFEAF3FB : 0xFF647184;
+                text(c, ellipsize(item.app, 32, 18), left + 40, y + 25, 17, secondary, false);
+                String time = DateFormat.format("HH:mm", item.when).toString();
+                p.setColor(secondary); p.setTextSize(17); p.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
+                float timeWidth = p.measureText(time);
+                text(c, time, left + width - 40 - timeWidth, y + 25, 17, secondary, false);
+                text(c, ellipsize(item.title, width - 80, 22), left + 40, y + 53, 20, fg, true);
+                if (!item.text.isEmpty()) text(c, ellipsize(item.text, width - 80, 17), left + 40, y + 78, 16, secondary, false);
+                if (i < shown - 1 && !selected) {
+                    p.setColor(0xFFD7DEE7);
+                    c.drawRect(left + 40, y + rowH - 1, left + width - 40, y + rowH, p);
+                }
+            }
+        }
+
+        private String ellipsize(String value, float maxWidth, float size) {
+            if (value == null) return "";
+            p.setTextSize(size);
+            p.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
+            if (p.measureText(value) <= maxWidth) return value;
+            String end = "…";
+            int cut = value.length();
+            while (cut > 1 && p.measureText(value.substring(0, cut) + end) > maxWidth) cut--;
+            return value.substring(0, Math.max(1, cut)) + end;
         }
 
         private void text(Canvas c, String s, float x, float y, float size, int color, boolean bold) {
@@ -115,11 +169,18 @@ public final class TvQuickPanelActivity extends Activity {
             if (e.getAction() != KeyEvent.ACTION_DOWN || e.getRepeatCount() != 0) return true;
             switch (e.getKeyCode()) {
                 case KeyEvent.KEYCODE_DPAD_UP:
-                    focus = (focus + COUNT - 1) % COUNT;
+                    if (notificationsPage) {
+                        if (focus > 0) focus--;
+                        else if (notificationOffset > 0) notificationOffset--;
+                    } else focus = (focus + COUNT - 1) % COUNT;
                     invalidate();
                     return true;
                 case KeyEvent.KEYCODE_DPAD_DOWN:
-                    focus = (focus + 1) % COUNT;
+                    if (notificationsPage) {
+                        int shown = Math.min(6, NotificationCenter.recent().size() - notificationOffset);
+                        if (focus + 1 < shown) focus++;
+                        else if (notificationOffset + shown < NotificationCenter.recent().size()) notificationOffset++;
+                    } else focus = (focus + 1) % COUNT;
                     invalidate();
                     return true;
                 case KeyEvent.KEYCODE_DPAD_CENTER:
@@ -129,7 +190,8 @@ public final class TvQuickPanelActivity extends Activity {
                     return true;
                 case KeyEvent.KEYCODE_BACK:
                 case KeyEvent.KEYCODE_ESCAPE:
-                    finish();
+                    if (notificationsPage) { notificationsPage = false; notificationOffset = 0; focus = 2; invalidate(); }
+                    else finish();
                     return true;
                 default:
                     return true;
@@ -137,9 +199,23 @@ public final class TvQuickPanelActivity extends Activity {
         }
 
         private void activate(int row) {
+            if (notificationsPage) {
+                java.util.List<NotificationCenter.Entry> items = NotificationCenter.recent();
+                int index = notificationOffset + row;
+                if (row >= 0 && index < items.size() && row < 6) {
+                    android.app.PendingIntent action = items.get(index).action;
+                    if (action != null) {
+                        try { action.send(); finish(); }
+                        catch (android.app.PendingIntent.CanceledException ignored) { }
+                    }
+                }
+                return;
+            }
             if (row == 2) {
-                sendBroadcast(new Intent(RemoteKeyService.ACTION_NOTIFICATIONS).setPackage(getPackageName()));
-                finish();
+                notificationsPage = true;
+                notificationOffset = 0;
+                focus = 0;
+                invalidate();
                 return;
             }
             Intent intent;

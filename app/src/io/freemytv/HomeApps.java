@@ -55,7 +55,7 @@ final class HomeApps {
     private HomeApps() {}
 
     static final int APP = 0, LIVE_TV = 1, INPUT = 2, ALL_APPS = 3, SETTINGS = 4, ANDROID_SETTINGS = 5, DEVICE = 6,
-            ACCOUNT_SETTINGS = 8;
+            ACCOUNT_SETTINGS = 8, VOICE_SEARCH = 9;
     /** The "HDMI Inputs" button: opens the bottom drawer on the inputs (the home screen handles it). */
     static final int INPUTS = 7;
     /** Image size of each card (16:9; on screen it shows up to ~330 px wide). */
@@ -215,7 +215,7 @@ final class HomeApps {
             TOP_HOME_SETTINGS, TOP_TV_SETTINGS));
     static final int MAX_TOP = TOP_DEFAULT.size();
 
-    /** The keys of the top buttons, in order (Home Settings, TV Settings and Google account). */
+    /** The keys of the top buttons, in order (Home Settings and TV Settings). */
     static List<String> topButtonKeys() {
         List<String> saved = Prefs.topButtons();
         if (saved == null) return TOP_DEFAULT;
@@ -444,6 +444,8 @@ final class HomeApps {
         skip.add(c.getPackageName());
         skip.addAll(HIDDEN);
         List<Item> items = new ArrayList<>();
+        items.add(special(c, VOICE_SEARCH, "freemytv-search", Ui.tr("Search"), "search"));
+        items.add(special(c, ACCOUNT_SETTINGS, "google-account", "Contas e login", "tv_settings"));
         Set<String> seen = new HashSet<>();
         for (String[] app : launchable(c)) {
             String pkg = app[0];
@@ -474,6 +476,10 @@ final class HomeApps {
     static boolean open(Activity a, Item it, View from, int x, int y, int w, int h) {
         if (it.kind == ACCOUNT_SETTINGS) {
             HomeMode.openLauncherProfile(a);
+            return true;
+        }
+        if (it.kind == VOICE_SEARCH) {
+            VoiceSearchActivity.open(a);
             return true;
         }
         Intent intent, plain = null;   // plain: the app's own home, when it won't take the title's address
