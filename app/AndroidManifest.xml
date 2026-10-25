@@ -136,14 +136,20 @@
         <activity
             android:name=".VoiceSearchActivity"
             android:process=":home"
-            android:exported="false"
+            android:exported="true"
             android:label="Free My TV"
             android:launchMode="singleTask"
             android:taskAffinity=""
             android:excludeFromRecents="true"
             android:screenOrientation="landscape"
             android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density|fontScale|locale|layoutDirection"
-            android:theme="@style/FreeMyTV.Home" />
+            android:theme="@style/FreeMyTV.Home">
+            <!-- KEYCODE_VOICE_ASSIST becomes ACTION_WEB_SEARCH in Android TV policy. -->
+            <intent-filter android:priority="1000">
+                <action android:name="android.speech.action.WEB_SEARCH" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
 
         <!-- The home screen. Its own process (:home): if it ever crashes, the safety net in the main process still
              works. It only becomes the TV's home screen in Free My TV mode (cmd package set-home-activity). -->
@@ -229,6 +235,29 @@
                 android:name="android.accessibilityservice"
                 android:resource="@xml/remote_key_service" />
         </service>
+
+        <!-- The OS consumes KEYCODE_ASSIST / KEYCODE_VOICE_ASSIST before app key filters run.
+             This user-selectable assistant hands the remote mic to our search and uses Google's
+             installed recognition service only to transcribe speech. -->
+        <service
+            android:name=".FreeMyTVVoiceInteractionService"
+            android:process=":voice"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_VOICE_INTERACTION">
+            <intent-filter>
+                <action android:name="android.service.voice.VoiceInteractionService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.voice_interaction"
+                android:resource="@xml/fmtv_voice_interaction" />
+        </service>
+        <service
+            android:name=".FreeMyTVVoiceSessionService"
+            android:process=":voice_session"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_VOICE_INTERACTION" />
 
         <!-- tools/photos.py writes photos here where adb can't reach the app's external folder (Android 11, Fire OS 8);
              only adb's shell may write (PhotoInbox checks). -->

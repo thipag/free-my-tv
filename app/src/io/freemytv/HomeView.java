@@ -3219,23 +3219,47 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (lightButtons.isEmpty()) return;
         int firstAction = tabs().length;
         int lastAction = firstAction + lightButtons.size() - 1;
-        String brand = "FreeMyTV " + Config.APP_VERSION + " · " + Config.APP_BUILD;
-        Paint brandPaint = Ui.text(Ui.semibold, 21 * k, WHITE);
+        String brand = "FreeMyTV";
+        String version = "v" + Config.APP_VERSION;
+        String build = Config.APP_BUILD;
+        Paint brandPaint = Ui.text(Ui.semibold, 19 * k, WHITE);
+        Paint buildPaint = Ui.text(Ui.medium, 11 * k, 0xDFFFFFFF);
         Paint clockPaint = Ui.text(Ui.semibold, 27 * k, WHITE);
         clockPaint.setFontFeatureSettings("tnum");
         float clockWidth = clockPaint.measureText("00:00:00");
-        float textWidth = brandPaint.measureText(brand) + 30 * k + clockWidth;
+        // Keep version/build in a fixed-width two-line label. A longer build identifier must not
+        // push the top actions over the selected tab (Ouça agora is the widest tab).
+        float identityWidth = 142 * k;
+        float textWidth = identityWidth + 22 * k + clockWidth;
         float left = Math.max((MARGIN + 30) * k,
-                topRects[firstAction].left - 58 * k - textWidth);
+                topRects[firstAction].left - 76 * k - textWidth);
         float right = topRects[lastAction].right + 18 * k;
         float cy = L_BUTTON_CY * k;
         RectF group = new RectF(left, cy - 38 * k, right, cy + 38 * k);
         drawBlueSurface(c, group, 28 * k);
 
-        float baseline = cy + Ui.halfCap(brandPaint);
         float brandX = left + 24 * k;
-        c.drawText(brand, brandX, baseline, brandPaint);
-        float clockX = brandX + brandPaint.measureText(brand) + 30 * k;
+        c.drawText(brand, brandX, cy - 2 * k, brandPaint);
+        buildPaint.setTextSize(11 * k);
+        float maxBuildWidth = identityWidth - 8 * k;
+        String detail = version + " · " + build;
+        if (buildPaint.measureText(detail) <= maxBuildWidth) {
+            c.drawText(detail, brandX, cy + 18 * k, buildPaint);
+        } else {
+            c.drawText(version, brandX, cy + 14 * k, buildPaint);
+            // Build hashes are short today; if the build format grows, break it into lines
+            // inside the fixed identity slot instead of widening the entire header.
+            String remaining = build;
+            float lineY = cy + 27 * k;
+            while (!remaining.isEmpty() && lineY <= cy + 34 * k) {
+                int chars = remaining.length();
+                while (chars > 1 && buildPaint.measureText(remaining.substring(0, chars)) > maxBuildWidth) chars--;
+                c.drawText(remaining.substring(0, chars), brandX, lineY, buildPaint);
+                remaining = remaining.substring(chars);
+                lineY += 11 * k;
+            }
+        }
+        float clockX = brandX + identityWidth + 22 * k;
         c.drawText(clockText, clockX, cy + Ui.halfCap(clockPaint), clockPaint);
         float dividerX = topRects[firstAction].left - 18 * k;
         fill.setShader(null); fill.setColor(tone(0x36000000, 0x40FFFFFF));
