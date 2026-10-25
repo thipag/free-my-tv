@@ -963,7 +963,7 @@ public class SettingsActivity extends Activity {
             // On Sony and Xiaomi, "nothing" leaves the key to the TV, which opens its usual app.
             appLabels.add(RemoteKeys.SONY ? Ui.tr("Sony default") : RemoteKeys.XIAOMI ? Ui.tr("Xiaomi default") : Ui.tr("Nothing"));
             // On Xiaomi the Mi button is the remote's Home button: it can open this home screen.
-            if (RemoteKeys.XIAOMI) {
+            if (RemoteKeys.XIAOMI || RemoteKeys.TCL) {
                 appPkgs.add(HomeMode.PKG);
                 appLabels.add("Free My TV");
             }

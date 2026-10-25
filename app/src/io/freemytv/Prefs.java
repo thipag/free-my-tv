@@ -132,7 +132,7 @@ final class Prefs {
         if (changed) { edit.apply(); version++; }
     }
 
-    /** The TCL Channel key is the TV's reliable return-home key while LauncherX services stay available. */
+    /** The TCL Channel key is the TV's reliable return-home key while Free My TV mode is on. */
     private static void migrateTclChannelHome() {
         if (!RemoteKeys.TCL || sp().getBoolean("tclChannelHomeV1", false)) return;
         setKeyApp(KEY_TCL_CHANNEL, HomeMode.PKG);

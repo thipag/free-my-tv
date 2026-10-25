@@ -39,7 +39,6 @@ public class HomeActivity extends Activity {
             return;
         }
         Ui.init(this);
-        HomeMode.warmLauncherDashboard(this);
         home = new HomeView(this);
         setContentView(home);
         getWindow().setBackgroundDrawable(null);

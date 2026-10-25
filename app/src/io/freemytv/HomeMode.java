@@ -1,8 +1,10 @@
 package io.freemytv;
 
 import android.content.Context;
+import android.content.Intent;
 import android.os.Build;
 import android.os.SystemClock;
+import android.provider.Settings;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -12,9 +14,6 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.RandomAccessFile;
-import java.nio.channels.FileChannel;
-import java.nio.channels.FileLock;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -24,8 +23,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /**
  * Original ⇄ Free My TV. "free": our home screen and screensaver, and the apps in the lists below turned off
@@ -47,12 +44,6 @@ final class HomeMode {
     /** The other copy: an update (ours or the TV's) moves the setting from it, without a notice. */
     private static final String OTHER_DREAM = PKG + "/" + PKG + (DREAM_ALONE ? ".Screensaver" : ".ScreensaverAlone");
     static final String FREE = "free", ORIGINAL = "original";
-    private static final String LAUNCHERX = "com.google.android.apps.tv.launcherx";
-    private static final long LAUNCHER_DASHBOARD_DEBOUNCE_MS = 3000L;
-    private static final ExecutorService ORIGINAL_UI = Executors.newSingleThreadExecutor();
-    private static boolean originalUiOpening;
-    private static Adb originalUiAdb;
-    private static boolean launcherXReady;
 
     /**
      * Fire TV (Fire OS): Amazon's launcher keeps the Home button (`priority=950` on `CATEGORY_HOME`), so the switch
@@ -255,101 +246,12 @@ final class HomeMode {
         ModeJob.schedule(c, ModeJob.APPLY, mode, 0);
     }
 
-    /** Opens LauncherX's native dashboard/profile temporarily while the ad-free home stays selected. */
-    static void openLauncherDashboard(Context context) {
-        openLauncherSurface(context, LAUNCHERX + "/.dashboard.DashboardHandler", true);
-    }
-
-    /** Opens the existing Google profile picker. This never adds or removes accounts. */
+    /** Opens Android TV account/sync settings without depending on the Google TV home app. */
     static void openLauncherProfile(Context context) {
-        openLauncherSurface(context, LAUNCHERX + "/.profile.chooser.ProfileChooserActivity", false);
-    }
-
-    /** Keep the TCL dashboard reachable, and keep its ADB transport warm in the remote-key process. */
-    static void warmLauncherDashboard(Context context) {
-        if (!isG15()) return;
-        Context app = context.getApplicationContext();
-        ORIGINAL_UI.execute(() -> {
-            try {
-                ensureLauncherX(app);
-                AppLog.w("Google TV Settings panel is warm");
-            } catch (IOException e) {
-                AppLog.w("Google TV surface warmup: " + e.getClass().getSimpleName());
-            }
-        });
-    }
-
-    private static boolean isG15() {
-        return "TCL".equalsIgnoreCase(Build.MANUFACTURER) && "G15".equalsIgnoreCase(Build.DEVICE);
-    }
-
-    private static Adb uiAdb(Context app) throws IOException {
-        if (originalUiAdb == null) originalUiAdb = Adb.connect(app, 3500, null);
-        return originalUiAdb;
-    }
-
-    private static String uiShell(Context app, String command) throws IOException {
-        try { return uiAdb(app).shell(command); }
-        catch (IOException first) {
-            if (originalUiAdb != null) originalUiAdb.close();
-            originalUiAdb = null;
-            return uiAdb(app).shell(command);
-        }
-    }
-
-    private static void ensureLauncherX(Context app) throws IOException {
-        if (launcherXReady) return;
-        String enabled = uiShell(app, "pm enable " + LAUNCHERX);
-        if (!enabled.contains("new state: enabled") && !enabled.contains("already enabled")) {
-            throw new IOException("LauncherX could not be enabled");
-        }
-        launcherXReady = true;
-    }
-
-    private static void openLauncherSurface(Context context, String component, boolean dashboard) {
-        if (!isG15()) return;
-        synchronized (HomeMode.class) {
-            if (originalUiOpening) return;
-            originalUiOpening = true;
-        }
-        Context app = context.getApplicationContext();
-        if (dashboard && !claimLauncherDashboardToggle(app)) {
-            synchronized (HomeMode.class) { originalUiOpening = false; }
-            return;
-        }
-        ORIGINAL_UI.execute(() -> {
-            try {
-                ensureLauncherX(app);
-                String command = dashboard
-                        ? "am start -a android.app.action.TOGGLE_NOTIFICATION_HANDLER_PANEL -n " + component
-                        : "am start -n " + component;
-                String launched = uiShell(app, command);
-                if (!launched.contains("Starting:")) AppLog.w("Google TV surface launch: " + launched.trim());
-            } catch (IOException | RuntimeException e) {
-                AppLog.w("Google TV surface: " + e.getClass().getSimpleName());
-            } finally {
-                synchronized (HomeMode.class) { originalUiOpening = false; }
-            }
-        });
-    }
-
-    /** The accessibility service and HomeActivity are separate processes; only one may toggle the dashboard per press. */
-    private static boolean claimLauncherDashboardToggle(Context app) {
-        File stamp = new File(app.getFilesDir(), "launcherx-dashboard-toggle.lock");
-        try (RandomAccessFile file = new RandomAccessFile(stamp, "rw");
-             FileChannel channel = file.getChannel();
-             FileLock lock = channel.lock()) {
-            long now = SystemClock.elapsedRealtime();
-            long last = file.length() >= Long.BYTES ? file.readLong() : 0;
-            if (last > 0 && now >= last && now - last < LAUNCHER_DASHBOARD_DEBOUNCE_MS) return false;
-            file.seek(0);
-            file.writeLong(now);
-            file.getFD().sync();
-            return true;
-        } catch (IOException | RuntimeException e) {
-            AppLog.w("Google TV panel debounce: " + e.getClass().getSimpleName());
-            return true;
-        }
+        Intent i = new Intent(Settings.ACTION_SYNC_SETTINGS).setPackage("com.android.tv.settings")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try { context.startActivity(i); }
+        catch (RuntimeException e) { AppLog.w("TV account settings: " + e.getClass().getSimpleName()); }
     }
 
     /** Our home screen crashed 3 times in 5 minutes: give the home screen back to the TV's own (asked by :home). */
@@ -361,13 +263,12 @@ final class HomeMode {
     static void bootCheck(Context c) {
         if (AMAZON) return;
         ensureRemoteService(c, 0);
-        // Some TCL Google TV builds launch LauncherX explicitly during boot even when Free My TV
-        // owns the HOME role. Bring our home back as soon as the boot receiver can schedule work.
+        // Some Google TV builds launch their stock home explicitly at boot. Bring our home back after settling.
         ModeJob.schedule(c, ModeJob.BOOT_HOME, null, 0);
         ModeJob.schedule(c, ModeJob.VERIFY, null, 45_000);
     }
 
-    /** Restore the selected launcher after TCL firmware's explicit LauncherX startup. */
+    /** Restore the selected launcher after the firmware's explicit stock-home startup. */
     static void bootHomeNow(Context app) {
         JSONObject s = state(app);
         if (!FREE.equals(s.optString("mode")) || s.optBoolean("homeReverted")) return;
@@ -582,12 +483,6 @@ final class HomeMode {
             for (String pkg : targets) {
                 done++;
                 busy(c, Ui.trf("Turning off apps ({done}/{total})…", "done", done, "total", targets.size()));
-                // On this Google TV build LauncherX owns the original Settings overlay. Keep it enabled so the
-                // dashboard stays warm and can open from the remote without a disable/enable cycle.
-                if (isG15() && LAUNCHERX.equals(pkg)) {
-                    disabled.remove(pkg);
-                    continue;
-                }
                 if (!candidates.contains(pkg) || needed.contains(pkg) || owners.contains(pkg) || keptOff.contains(pkg)) continue;
                 // The TV's home screen only once Google TV's setup app is off: its recovery screen would take Home.
                 if (pkg.equals(homePkg) && setupOn) {
@@ -888,12 +783,6 @@ final class HomeMode {
                 boolean setupOn = present.contains(GOOGLE_SETUP) && !disabledNow.contains(GOOGLE_SETUP)
                         && s.optBoolean("setupHome", true);
                 for (String pkg : order) {
-                    // LauncherX stays enabled for the native Settings overlay; its Home activity is redirected by
-                    // RemoteKeyService while Free My TV mode is active.
-                    if (isG15() && LAUNCHERX.equals(pkg)) {
-                        disabled.remove(pkg);
-                        continue;
-                    }
                     if (!mayTurnOff(pkg) || !present.contains(pkg) || owners.contains(pkg) || wait.contains(pkg)) continue;
                     if (pkg.equals(HTC_HOME) && !jmOurs) continue;
                     if (disabledNow.contains(pkg)) {

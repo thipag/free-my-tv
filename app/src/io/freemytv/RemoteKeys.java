@@ -67,10 +67,10 @@ final class RemoteKeys {
         catch (RuntimeException e) { AppLog.w("Free My TV Home key: " + e.getClass().getSimpleName()); }
     }
 
-    /** Original Google TV dashboard on LauncherX; older TCL builds retain their own quick panel service. */
+    /** A Free My TV panel on this G15; the TCL quick panel on older TCL builds. */
     static boolean openTclQuickPanel(Context context) {
         if ("G15".equalsIgnoreCase(Build.DEVICE)) {
-            HomeMode.openLauncherDashboard(context);
+            TvQuickPanelActivity.open(context);
             return true;
         }
         Intent panel = new Intent("com.tcl.quickpanel.show.window")
