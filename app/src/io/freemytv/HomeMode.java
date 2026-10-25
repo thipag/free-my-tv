@@ -12,6 +12,9 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -45,6 +48,7 @@ final class HomeMode {
     private static final String OTHER_DREAM = PKG + "/" + PKG + (DREAM_ALONE ? ".Screensaver" : ".ScreensaverAlone");
     static final String FREE = "free", ORIGINAL = "original";
     private static final String LAUNCHERX = "com.google.android.apps.tv.launcherx";
+    private static final long LAUNCHER_DASHBOARD_DEBOUNCE_MS = 3000L;
     private static final ExecutorService ORIGINAL_UI = Executors.newSingleThreadExecutor();
     private static boolean originalUiOpening;
     private static Adb originalUiAdb;
@@ -309,6 +313,10 @@ final class HomeMode {
             originalUiOpening = true;
         }
         Context app = context.getApplicationContext();
+        if (dashboard && !claimLauncherDashboardToggle(app)) {
+            synchronized (HomeMode.class) { originalUiOpening = false; }
+            return;
+        }
         ORIGINAL_UI.execute(() -> {
             try {
                 ensureLauncherX(app);
@@ -323,6 +331,25 @@ final class HomeMode {
                 synchronized (HomeMode.class) { originalUiOpening = false; }
             }
         });
+    }
+
+    /** The accessibility service and HomeActivity are separate processes; only one may toggle the dashboard per press. */
+    private static boolean claimLauncherDashboardToggle(Context app) {
+        File stamp = new File(app.getFilesDir(), "launcherx-dashboard-toggle.lock");
+        try (RandomAccessFile file = new RandomAccessFile(stamp, "rw");
+             FileChannel channel = file.getChannel();
+             FileLock lock = channel.lock()) {
+            long now = SystemClock.elapsedRealtime();
+            long last = file.length() >= Long.BYTES ? file.readLong() : 0;
+            if (last > 0 && now >= last && now - last < LAUNCHER_DASHBOARD_DEBOUNCE_MS) return false;
+            file.seek(0);
+            file.writeLong(now);
+            file.getFD().sync();
+            return true;
+        } catch (IOException | RuntimeException e) {
+            AppLog.w("Google TV panel debounce: " + e.getClass().getSimpleName());
+            return true;
+        }
     }
 
     /** Our home screen crashed 3 times in 5 minutes: give the home screen back to the TV's own (asked by :home). */
