@@ -55,6 +55,7 @@ final class Recs {
         int seasonNumber, episodeNumber;
         long remainingMillis;
         long lastEngaged;
+        long providerSortWeight;
         boolean detailed;
         java.io.File photo;     // one of your own photos (Photos): no title, no caption
     }

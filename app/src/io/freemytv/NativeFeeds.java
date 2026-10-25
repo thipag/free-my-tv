@@ -313,7 +313,7 @@ final class NativeFeeds {
                 TvContract.PreviewPrograms.COLUMN_INTENT_URI, TvContract.PreviewPrograms.COLUMN_THUMBNAIL_URI,
                 TvContract.PreviewPrograms.COLUMN_POSTER_ART_URI, TvContract.PreviewPrograms.COLUMN_LOGO_URI,
                 TvContract.PreviewPrograms.COLUMN_LAST_PLAYBACK_POSITION_MILLIS, TvContract.PreviewPrograms.COLUMN_DURATION_MILLIS,
-                "last_engagement_time_utc_millis"};
+                "last_engagement_time_utc_millis", "weight"};
         Uri uri = TvContract.buildPreviewProgramsUriForChannel(row.id);
         try (Cursor c = resolver.query(uri, columns, null, null, null)) {
             if (c == null) return;
@@ -347,6 +347,7 @@ final class NativeFeeds {
                 long position = number(c, TvContract.PreviewPrograms.COLUMN_LAST_PLAYBACK_POSITION_MILLIS);
                 long total = number(c, TvContract.PreviewPrograms.COLUMN_DURATION_MILLIS);
                 p.lastEngaged = number(c, "last_engagement_time_utc_millis");
+                p.providerSortWeight = number(c, "weight");
                 if (total > 0 && position > 0) p.progress = Math.max(0f, Math.min(1f, (float) position / total));
                 if (NUVIO.equals(row.pkg) && total >= 300_000L && position > 0 && position < total) {
                     long minutes = Math.max(1, (total - position + 59_999L) / 60_000L);
@@ -357,7 +358,10 @@ final class NativeFeeds {
                 }
                 if (p.imageUrl != null && !p.imageUrl.isEmpty()) row.items.add(p);
             }
-            row.items.sort((a, b) -> Long.compare(b.lastEngaged, a.lastEngaged));
+            row.items.sort((a, b) -> {
+                int weight = Long.compare(b.providerSortWeight, a.providerSortWeight);
+                return weight != 0 ? weight : Long.compare(b.lastEngaged, a.lastEngaged);
+            });
         } catch (Exception e) {
             AppLog.w("preview channel " + row.pkg + ": " + e.getClass().getSimpleName() + " " + String.valueOf(e.getMessage()));
         }
@@ -462,10 +466,13 @@ final class NativeFeeds {
         if (!continuing.isEmpty()) matches = continuing;
         List<Recs.Pick> out = new ArrayList<>();
         for (FeedChannel f : matches) out.addAll(f.items);
-        // Nuvio can publish more than one continue-watching channel. Sort the full Nuvio
-        // set by last engagement before applying the row limit, so the most recently
-        // watched title cannot be pushed onto a later page by channel ordering.
-        out.sort((a, b) -> Long.compare(b.lastEngaged, a.lastEngaged));
+        // Nuvio publishes its Continue Watching order as Android TV program weight. The
+        // provider clears last_engagement_time_utc_millis on some TV builds, so use its
+        // explicit weight first and engagement time only as a fallback/tie breaker.
+        out.sort((a, b) -> {
+            int weight = Long.compare(b.providerSortWeight, a.providerSortWeight);
+            return weight != 0 ? weight : Long.compare(b.lastEngaged, a.lastEngaged);
+        });
         return out.size() > 8 ? new ArrayList<>(out.subList(0, 8)) : out;
     }
 
