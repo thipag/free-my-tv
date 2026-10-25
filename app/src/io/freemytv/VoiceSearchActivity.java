@@ -20,6 +20,7 @@ import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.view.WindowManager;
@@ -48,7 +49,9 @@ public final class VoiceSearchActivity extends Activity {
     private EditText queryField;
     private TextView status;
     private ProgressBar progress;
+    private LinearLayout statusRow;
     private LinearLayout results;
+    private ScrollView resultsScroller;
     private IconAction micButton;
     private IconAction searchButton;
     private int generation;
@@ -92,22 +95,29 @@ public final class VoiceSearchActivity extends Activity {
     private void buildUi() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setClipChildren(false);
+        root.setClipChildren(true);
         root.setBackgroundColor(0xFFF3F6FA);
         root.setPadding(dp(46), dp(24), dp(46), dp(20));
 
-        TextView heading = new TextView(this);
-        heading.setText(Ui.tr("Search"));
-        heading.setTextColor(0xFF172033);
-        heading.setTextSize(29);
-        heading.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        root.addView(heading, new LinearLayout.LayoutParams(-1, dp(48)));
+        LinearLayout heading = new LinearLayout(this);
+        heading.setGravity(Gravity.CENTER_VERTICAL);
+        SearchBookIcon headingIcon = new SearchBookIcon(this);
+        LinearLayout.LayoutParams headingIconLp = new LinearLayout.LayoutParams(dp(34), dp(34));
+        headingIconLp.rightMargin = dp(12);
+        heading.addView(headingIcon, headingIconLp);
+        TextView headingText = new TextView(this);
+        headingText.setText(Ui.tr("Search"));
+        headingText.setTextColor(0xFF172033);
+        headingText.setTextSize(28);
+        headingText.setTypeface(Typeface.create("sans-serif-rounded", Typeface.BOLD));
+        heading.addView(headingText, new LinearLayout.LayoutParams(-1, -2));
+        root.addView(heading, new LinearLayout.LayoutParams(-1, dp(46)));
 
         LinearLayout searchRow = new LinearLayout(this);
         searchRow.setGravity(Gravity.CENTER_VERTICAL);
-        searchRow.setPadding(dp(20), 0, dp(8), 0);
+        searchRow.setPadding(dp(18), 0, dp(6), 0);
         GradientDrawable searchBg = new GradientDrawable();
-        searchBg.setColor(Color.WHITE); searchBg.setCornerRadius(dp(24)); searchBg.setStroke(dp(1), 0xFFD6DEE8);
+        searchBg.setColor(Color.WHITE); searchBg.setCornerRadius(dp(22)); searchBg.setStroke(dp(1), 0xFFD6DEE8);
         searchRow.setBackground(searchBg);
         queryField = new EditText(this);
         queryField.setSingleLine(true); queryField.setTextSize(22); queryField.setTextColor(0xFF172033);
@@ -115,14 +125,14 @@ public final class VoiceSearchActivity extends Activity {
         queryField.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
         queryField.setBackgroundColor(Color.TRANSPARENT);
         queryField.setSelectAllOnFocus(false);
-        searchRow.addView(queryField, new LinearLayout.LayoutParams(0, dp(64), 1));
+        searchRow.addView(queryField, new LinearLayout.LayoutParams(0, dp(52), 1));
         micButton = new IconAction(this, MIC, Ui.tr("Voice search"));
         micButton.setOnClickListener(v -> startVoice());
-        searchRow.addView(micButton, new LinearLayout.LayoutParams(dp(54), dp(54)));
+        searchRow.addView(micButton, new LinearLayout.LayoutParams(dp(48), dp(48)));
         searchButton = new IconAction(this, SEARCH, Ui.tr("Search"));
         searchButton.setOnClickListener(v -> search(queryField.getText().toString()));
-        searchRow.addView(searchButton, new LinearLayout.LayoutParams(dp(54), dp(54)));
-        root.addView(searchRow, new LinearLayout.LayoutParams(-1, dp(72)));
+        searchRow.addView(searchButton, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        root.addView(searchRow, new LinearLayout.LayoutParams(-1, dp(60)));
         queryField.setOnEditorActionListener((v, action, event) -> {
             if (action == EditorInfo.IME_ACTION_SEARCH || action == EditorInfo.IME_ACTION_DONE
                     || (event != null && event.getKeyCode() == KeyEvent.KEYCODE_ENTER)) {
@@ -131,15 +141,12 @@ public final class VoiceSearchActivity extends Activity {
             return false;
         });
 
-        LinearLayout statusRow = new LinearLayout(this);
+        statusRow = new LinearLayout(this);
         statusRow.setGravity(Gravity.CENTER_VERTICAL);
-        progress = new ProgressBar(this, null, android.R.attr.progressBarStyleSmall);
+        progress = new ProgressBar(this, null, android.R.attr.progressBarStyle);
         progress.setIndeterminate(true);
         progress.setIndeterminateTintList(ColorStateList.valueOf(0xFF4C8FE0));
         progress.setVisibility(View.GONE);
-        LinearLayout.LayoutParams progressLp = new LinearLayout.LayoutParams(dp(30), dp(30));
-        progressLp.leftMargin = dp(6); progressLp.rightMargin = dp(10);
-        statusRow.addView(progress, progressLp);
         status = new TextView(this);
         status.setTextColor(0xFF667487); status.setTextSize(17);
         status.setPadding(dp(6), dp(12), dp(6), dp(8));
@@ -148,9 +155,10 @@ public final class VoiceSearchActivity extends Activity {
         root.addView(statusRow, new LinearLayout.LayoutParams(-1, dp(48)));
 
         ScrollView vertical = new ScrollView(this);
+        resultsScroller = vertical;
         vertical.setFillViewport(false);
-        vertical.setClipToPadding(false);
-        vertical.setClipChildren(false);
+        vertical.setClipToPadding(true);
+        vertical.setClipChildren(true);
         vertical.setVerticalScrollBarEnabled(false);
         results = new LinearLayout(this); results.setOrientation(LinearLayout.VERTICAL);
         results.setClipChildren(false);
@@ -173,6 +181,7 @@ public final class VoiceSearchActivity extends Activity {
             voice.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
             if (voice.resolveActivity(getPackageManager()) == null) {
                 progress.setVisibility(View.GONE);
+                statusRow.setVisibility(View.VISIBLE);
                 status.setText("Busca por voz indisponível. Digite para pesquisar.");
                 queryField.requestFocus();
                 return;
@@ -180,6 +189,7 @@ public final class VoiceSearchActivity extends Activity {
             startActivityForResult(voice, VOICE_REQUEST);
         } catch (RuntimeException e) {
             progress.setVisibility(View.GONE);
+            statusRow.setVisibility(View.VISIBLE);
             status.setText("Busca por voz indisponível. Digite para pesquisar.");
             AppLog.w("voice recognizer: " + e.getClass().getSimpleName());
         }
@@ -196,6 +206,7 @@ public final class VoiceSearchActivity extends Activity {
         } else {
             hideKeyboard();
             progress.setVisibility(View.GONE);
+            statusRow.setVisibility(View.VISIBLE);
             status.setText("Não consegui entender. Tente novamente ou digite o título.");
             micButton.requestFocus();
         }
@@ -205,6 +216,7 @@ public final class VoiceSearchActivity extends Activity {
         String query = raw == null ? "" : raw.trim();
         if (query.length() < 2) {
             progress.setVisibility(View.GONE);
+            statusRow.setVisibility(View.VISIBLE);
             status.setText("Digite ou dite pelo menos dois caracteres.");
             queryField.requestFocus();
             return;
@@ -212,13 +224,32 @@ public final class VoiceSearchActivity extends Activity {
         queryField.setText(query);
         hideKeyboard();
         queryField.clearFocus();
-        status.setText("Pesquisando nos apps disponíveis…");
-        progress.setVisibility(View.VISIBLE);
+        statusRow.setVisibility(View.GONE);
+        status.setText("");
         results.removeAllViews();
+        FrameLayout loadingPanel = new FrameLayout(this);
+        LinearLayout loadingContent = new LinearLayout(this);
+        loadingContent.setOrientation(LinearLayout.VERTICAL);
+        loadingContent.setGravity(Gravity.CENTER);
+        progress.setVisibility(View.VISIBLE);
+        if (progress.getParent() instanceof ViewGroup) {
+            ((ViewGroup) progress.getParent()).removeView(progress);
+        }
+        loadingContent.addView(progress, new LinearLayout.LayoutParams(dp(46), dp(46)));
+        TextView loadingText = new TextView(this);
+        loadingText.setText("Pesquisando nos apps disponíveis…");
+        loadingText.setTextColor(0xFF667487);
+        loadingText.setTextSize(17);
+        LinearLayout.LayoutParams loadingTextLp = new LinearLayout.LayoutParams(-2, -2);
+        loadingTextLp.topMargin = dp(14);
+        loadingContent.addView(loadingText, loadingTextLp);
+        loadingPanel.addView(loadingContent, new FrameLayout.LayoutParams(-1, -1, Gravity.CENTER));
+        results.addView(loadingPanel, new LinearLayout.LayoutParams(-1, dp(220)));
         final int request = ++generation;
         UnifiedSearch.search(this, query, sections -> runOnUiThread(() -> {
             if (request != generation || isFinishing()) return;
             progress.setVisibility(View.GONE);
+            results.removeAllViews();
             boolean found = false;
             View firstResult = null;
             for (UnifiedSearch.Section section : sections) {
@@ -227,7 +258,15 @@ public final class VoiceSearchActivity extends Activity {
                 if (firstResult == null) firstResult = firstInSection;
                 found = true;
             }
-            status.setText(found ? "Resultados para “" + query + "”" : "Nenhum resultado nos apps compatíveis para “" + query + "”.");
+            status.setText("");
+            if (!found) {
+                TextView empty = new TextView(this);
+                empty.setText("Nenhum resultado nos apps compatíveis.");
+                empty.setTextColor(0xFF667487);
+                empty.setTextSize(18);
+                empty.setGravity(Gravity.CENTER);
+                results.addView(empty, new LinearLayout.LayoutParams(-1, dp(180)));
+            }
             if (firstResult != null) firstResult.requestFocus();
             else micButton.requestFocus();
         }));
@@ -266,33 +305,51 @@ public final class VoiceSearchActivity extends Activity {
         row.setMinimumHeight(artHeightFor(section.layout) + dp(58) + dp(60));
         View first = null;
         for (UnifiedSearch.Hit hit : section.hits) {
-            View item = card(hit, section.layout);
+            View item = card(hit, section.layout, heading);
             if (first == null) first = item;
             row.addView(item);
         }
         horizontal.addView(row, new HorizontalScrollView.LayoutParams(-2, -2));
+        Runnable alignCarousel = () -> {
+            if (row.getChildCount() == 0) return;
+            int best = 0;
+            int bestDistance = Integer.MAX_VALUE;
+            for (int i = 0; i < row.getChildCount(); i++) {
+                View child = row.getChildAt(i);
+                int target = Math.max(0, Math.min(row.getWidth() - horizontal.getWidth(),
+                        child.getLeft() - row.getPaddingLeft()));
+                int distance = Math.abs(target - horizontal.getScrollX());
+                if (distance < bestDistance) { best = target; bestDistance = distance; }
+            }
+            if (bestDistance > dp(4)) horizontal.smoothScrollTo(best, 0);
+        };
         horizontal.setOnScrollChangeListener((v, scrollX, scrollY, oldX, oldY) -> {
-            if (section.hits.size() <= 3) return;
-            boolean left = scrollX > dp(4);
-            boolean right = scrollX + horizontal.getWidth() < row.getWidth() - dp(4);
-            arrows.setText((left ? "‹" : " ") + "     " + (right ? "›" : " "));
+            if (section.hits.size() > 3) {
+                boolean left = scrollX > dp(4);
+                boolean right = scrollX + horizontal.getWidth() < row.getWidth() - dp(4);
+                arrows.setText((left ? "‹" : " ") + "     " + (right ? "›" : " "));
+            }
+            horizontal.removeCallbacks(alignCarousel);
+            horizontal.postDelayed(alignCarousel, 180);
         });
         results.addView(horizontal, new LinearLayout.LayoutParams(-1, -2));
         return first;
     }
 
-    private View card(UnifiedSearch.Hit hit, int layout) {
+    private View card(UnifiedSearch.Hit hit, int layout, View sectionHeading) {
         int cardWidth = dp(layout == UnifiedSearch.POSTER ? 136 : layout == UnifiedSearch.SQUARE ? 148 : 244);
-        int contentWidth = cardWidth - dp(8);
+        int contentWidth = cardWidth - dp(4);
         int artHeight = dp(layout == UnifiedSearch.POSTER ? 194 : layout == UnifiedSearch.SQUARE ? 148 : 137);
         LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL);
-        card.setFocusable(true); card.setClickable(true); card.setElevation(dp(4));
-        card.setPadding(dp(4), dp(4), dp(4), dp(4));
+        card.setFocusable(true); card.setClickable(true); card.setElevation(0);
+        card.setPadding(dp(2), dp(2), dp(2), dp(2));
         card.setBackground(cardBackground(false));
         card.setOnFocusChangeListener((v, focused) -> {
-            v.setBackground(cardBackground(focused)); v.setElevation(dp(focused ? 15 : 4));
-            v.animate().scaleX(focused ? 1.045f : 1f).scaleY(focused ? 1.045f : 1f)
-                    .translationY(focused ? -dp(8) : 0).setDuration(130).start();
+            v.setBackground(cardBackground(focused)); v.setElevation(0);
+            v.animate().scaleX(focused ? 1.025f : 1f).scaleY(focused ? 1.025f : 1f)
+                    .translationY(focused ? -dp(3) : 0).setDuration(130).start();
+            if (focused) resultsScroller.post(() ->
+                    resultsScroller.smoothScrollTo(0, Math.max(0, sectionHeading.getTop())));
         });
         card.setOnClickListener(v -> { hit.open(this); });
 
@@ -304,7 +361,7 @@ public final class VoiceSearchActivity extends Activity {
         caption.setGravity(Gravity.CENTER_VERTICAL);
         caption.setPadding(dp(12), dp(8), dp(12), dp(8));
         GradientDrawable captionBg = new GradientDrawable();
-        captionBg.setColor(Color.WHITE); captionBg.setCornerRadii(new float[] {0, 0, 0, 0, dp(11), dp(11), dp(11), dp(11)});
+        captionBg.setColor(Color.WHITE); captionBg.setCornerRadii(new float[] {0, 0, 0, 0, dp(14), dp(14), dp(14), dp(14)});
         caption.setBackground(captionBg);
         TextView title = new TextView(this); title.setText(hit.title); title.setTextColor(0xFF172033);
         title.setTextSize(16); title.setMaxLines(2); title.setEllipsize(TextUtils.TruncateAt.END);
@@ -348,9 +405,18 @@ public final class VoiceSearchActivity extends Activity {
 
     private GradientDrawable cardBackground(boolean focused) {
         GradientDrawable d = new GradientDrawable();
-        d.setColor(focused ? 0xFFFDFEFF : Color.WHITE); d.setCornerRadius(dp(17));
-        d.setStroke(dp(focused ? 3 : 1), focused ? 0xFF3978E8 : 0xFFD8E0E9);
+        d.setColor(focused ? 0xFFFDFEFF : Color.WHITE); d.setCornerRadius(dp(16));
+        d.setStroke(dp(focused ? 2 : 1), focused ? 0xFF3978E8 : 0xFFD8E0E9);
         return d;
+    }
+
+    private final class SearchBookIcon extends View {
+        SearchBookIcon(Context context) { super(context); }
+        @Override protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            Symbols.draw(VoiceSearchActivity.this, canvas, "library_search", getWidth() / 2f,
+                    getHeight() / 2f, dp(28), 0xFF3978E8);
+        }
     }
 
     private void hideKeyboard() {
