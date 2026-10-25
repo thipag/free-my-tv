@@ -44,9 +44,18 @@ import java.util.concurrent.Executors;
 final class Recs {
     static final class Pick {
         int id;
-        String kind;            // "movie" or "tv"
-        String title, backdrop, meta = "", app, pkg;
+        String kind;            // movie/show catalog, news, native app row, or Nuvio title
+        String title, backdrop, app, pkg, imageUrl;
+        volatile String meta = "";
         String link;            // opens the title in its app (looked up with Watchmode), or null: the app's home
+        String intentUri;       // native Android TV channel action (SmartTube / Nuvio)
+        float progress = -1f;   // native preview program progress, when the source publishes it
+        volatile float seasonProgress = -1f;
+        volatile String extra = "";
+        int seasonNumber, episodeNumber;
+        long remainingMillis;
+        long lastEngaged;
+        long providerSortWeight;
         boolean detailed;
         java.io.File photo;     // one of your own photos (Photos): no title, no caption
     }

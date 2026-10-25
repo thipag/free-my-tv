@@ -258,7 +258,7 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
         cornerDate = Ui.numbers(Ui.semibold, 30 * k, 0xEBFFFFFF);
         cornerQuote = Ui.numbers(Ui.regular, 23 * k, 0xC7FFFFFF);
         cornerStale = Ui.text(Ui.medium, 21 * k, 0x99FFFFFF);
-        cornerClock = Ui.numbers(Ui.displaySemibold, CLOCK_SIZE * k, 0xF2FFFFFF);
+        cornerClock = Ui.numbers(Ui.displaySemibold, CLOCK_SIZE * k, 0xFFFFFFFF);
         labelPaint = Ui.text(Ui.medium, 25 * k, 0xB8FFFFFF);
         labelPaint.setLetterSpacing(0.1f);
         titlePaint = new TextPaint(Ui.text(Ui.displayMedium, 76 * k, 0xFFFFFFFF));
@@ -450,7 +450,6 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
             chromeDirty = true;
         }
         if (running) advance(up);
-        if (!glassFor.equals(clock)) buildGlass(clock);
 
         float first = current == null ? 0 : fadeIn(up - firstAt, FIRST_MS);
         if (current == null || first < 1) {
@@ -572,16 +571,9 @@ final class DreamView extends View implements Choreographer.FrameCallback, HomeD
             }
             c.drawText(date, x - cornerDate.measureText(date), DATE_BASE * k, cornerDate);
 
-            Glass g = glass;
-            if (g != null && glassShader != null) {
-                // The shadow under the glass: sets the digits apart from a bright photo.
-                shadowPaint.setAlpha(140);
-                c.drawBitmap(g.shadow, g.x, g.y + 6 * k, shadowPaint);
-            } else {
-                Rect ink = new Rect();
-                cornerClock.getTextBounds(clock, 0, clock.length(), ink);
-                c.drawText(clock, right - ink.right, CLOCK_TOP * k - ink.top, cornerClock);
-            }
+            Rect ink = new Rect();
+            cornerClock.getTextBounds(clock, 0, clock.length(), ink);
+            c.drawText(clock, right - ink.right, CLOCK_TOP * k - ink.top, cornerClock);
 
             // Compact prices under the clock, right-aligned.
             float base = (CLOCK_TOP + Ui.cap(cornerClock) / k + QUOTES_GAP) * k;

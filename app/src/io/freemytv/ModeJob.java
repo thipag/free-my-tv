@@ -14,7 +14,7 @@ import android.os.PersistableBundle;
  */
 public class ModeJob extends JobService {
     static final String APPLY = "apply", VERIFY = "verify", REVERT = "revert", MEMORY = "memory", REMOTE = "remote",
-            PLAYING = "playing";
+            PLAYING = "playing", BOOT_HOME = "boot_home";
 
     @Override public boolean onStartJob(JobParameters params) {
         PersistableBundle extras = params.getExtras();
@@ -30,6 +30,7 @@ public class ModeJob extends JobService {
                     case MEMORY: HomeMode.measureMemoryNow(app, mode); break;
                     case REMOTE: HomeMode.ensureRemoteServiceNow(app); break;
                     case PLAYING: HomeMode.nowPlayingAccessNow(app); break;
+                    case BOOT_HOME: HomeMode.bootHomeNow(app); break;
                     default: break;
                 }
             } catch (Throwable t) {

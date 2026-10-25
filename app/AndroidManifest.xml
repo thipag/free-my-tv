@@ -6,6 +6,9 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Read the published Android TV preview rows from SmartTube and Nuvio. -->
+    <uses-permission android:name="com.android.providers.tv.permission.READ_EPG_DATA" />
+    <uses-permission android:name="android.permission.READ_TV_LISTINGS" />
     <!-- After the TV boots (and after a TV update), checks that Free My TV mode is still as you left it. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- The sleep timer's minutes left over any app (SleepOverlay), when picked; allowed through ADB, as Android TV
@@ -49,6 +52,11 @@
         <package android:name="com.crunchyroll.crunchyroid" />
         <package android:name="net.cme.voyo.cz.tvapp" />
         <package android:name="com.spotify.tv.android" />
+        <package android:name="com.nuvio.tv" />
+        <package android:name="org.smarttube.beta" />
+        <package android:name="com.tcl.dashboard" />
+        <package android:name="com.google.android.apps.mediashell" />
+        <package android:name="com.google.android.apps.tv.launcherx" />
         <package android:name="com.tcl.tv" />
         <package android:name="com.google.android.tv" />
         <package android:name="com.mediatek.wwtv.tvcenter" />

@@ -21,6 +21,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Original ⇄ Free My TV. "free": our home screen and screensaver, and the apps in the lists below turned off
@@ -42,6 +44,11 @@ final class HomeMode {
     /** The other copy: an update (ours or the TV's) moves the setting from it, without a notice. */
     private static final String OTHER_DREAM = PKG + "/" + PKG + (DREAM_ALONE ? ".Screensaver" : ".ScreensaverAlone");
     static final String FREE = "free", ORIGINAL = "original";
+    private static final String LAUNCHERX = "com.google.android.apps.tv.launcherx";
+    private static final ExecutorService ORIGINAL_UI = Executors.newSingleThreadExecutor();
+    private static boolean originalUiOpening;
+    private static Adb originalUiAdb;
+    private static boolean launcherXReady;
 
     /**
      * Fire TV (Fire OS): Amazon's launcher keeps the Home button (`priority=950` on `CATEGORY_HOME`), so the switch
@@ -72,6 +79,10 @@ final class HomeMode {
      * your brand's, see the README). The TV's own home screen and screensaver are added at switch time.
      */
     static final String[] DEBLOAT = {
+        // TCL Android TV: telemetry, reporting and promotional provisioning packages.
+        "com.tcl.bi", "com.tcl.xian.StartandroidService", "com.tcl.bootadservice",
+        "android.autoinstalls.config.tcl.device", "com.google.android.feedback",
+        "com.google.android.tv.bugreportsender",
         "com.google.android.play.games", "com.google.android.youtube.tvmusic",        // Play Games, YouTube Music
         // TCL
         "com.tcl.magiconnectfree", "com.tcl.miracast",                                // screen mirroring apps
@@ -102,8 +113,23 @@ final class HomeMode {
     /** The voice assistant, only with disable_assistant=true in config.properties (the mic button stops working). */
     static final String[] ASSISTANT = {"com.google.android.katniss", "com.android.hotwordenrollment.okgoogle"};
 
+    /** TCL G15 Google TV packages retained for Live TV, notifications and Google app support. */
+    private static final Set<String> TCL_G15_KEEP = new HashSet<>(Arrays.asList(
+            "com.google.android.feedback", "com.google.android.play.games", "com.google.android.youtube.tvmusic",
+            "com.tcl.waterfall.overseas", "com.tcl.channelplus", "com.tcl.messagebox"));
+
+    private static boolean isDebloat(String pkg) {
+        return Arrays.asList(DEBLOAT).contains(pkg)
+                && !("TCL".equalsIgnoreCase(Build.MANUFACTURER) && "G15".equalsIgnoreCase(Build.DEVICE) && TCL_G15_KEEP.contains(pkg));
+    }
+
     /** Never turned off, not even by mistake (picture, sound, inputs, remote, store). Checked before every disable. */
     private static final Set<String> PROTECTED = new HashSet<>(Arrays.asList(
+        // Keep voice, casting, TCL account integration, sound controls and installers on supported TCL TVs.
+        "com.google.android.katniss", "com.google.android.speech.pumpkin", "com.google.android.tv.assistant",
+        "com.tcl.assistant", "com.tcl.smartalexa", "com.tcl.miracast", "com.tcl.magiconnectfree",
+        "com.tcl.MultiScreenInteraction_TV", "com.tcl.usercenter", "com.tcl.showmode", "com.tcl.appmarket2",
+        "org.smarttube.beta", "org.smarttube.stable", "com.stremio.one", "com.globo.globotv", "com.spotify.tv.android",
         "com.tcl.ttvs", "com.tvos", "com.tcl.systemserver", "com.tcl.systemui.plugin", "com.tcl.tv", "com.tcl.tvinput",
         "com.tcl.hearaid", "com.dolby.android.audio.service", "com.tcl.globalkeyoverlay", "com.tcl.autopair",
         "com.tcl.UpdatePeripheral", "com.tcl.dashboard", "com.tcl.suspension", "com.tcl.providers.config",
@@ -225,6 +251,80 @@ final class HomeMode {
         ModeJob.schedule(c, ModeJob.APPLY, mode, 0);
     }
 
+    /** Opens LauncherX's native dashboard/profile temporarily while the ad-free home stays selected. */
+    static void openLauncherDashboard(Context context) {
+        openLauncherSurface(context, LAUNCHERX + "/.dashboard.DashboardHandler", true);
+    }
+
+    /** Opens the existing Google profile picker. This never adds or removes accounts. */
+    static void openLauncherProfile(Context context) {
+        openLauncherSurface(context, LAUNCHERX + "/.profile.chooser.ProfileChooserActivity", false);
+    }
+
+    /** Keep the TCL dashboard reachable, and keep its ADB transport warm in the remote-key process. */
+    static void warmLauncherDashboard(Context context) {
+        if (!isG15()) return;
+        Context app = context.getApplicationContext();
+        ORIGINAL_UI.execute(() -> {
+            try {
+                ensureLauncherX(app);
+                AppLog.w("Google TV Settings panel is warm");
+            } catch (IOException e) {
+                AppLog.w("Google TV surface warmup: " + e.getClass().getSimpleName());
+            }
+        });
+    }
+
+    private static boolean isG15() {
+        return "TCL".equalsIgnoreCase(Build.MANUFACTURER) && "G15".equalsIgnoreCase(Build.DEVICE);
+    }
+
+    private static Adb uiAdb(Context app) throws IOException {
+        if (originalUiAdb == null) originalUiAdb = Adb.connect(app, 3500, null);
+        return originalUiAdb;
+    }
+
+    private static String uiShell(Context app, String command) throws IOException {
+        try { return uiAdb(app).shell(command); }
+        catch (IOException first) {
+            if (originalUiAdb != null) originalUiAdb.close();
+            originalUiAdb = null;
+            return uiAdb(app).shell(command);
+        }
+    }
+
+    private static void ensureLauncherX(Context app) throws IOException {
+        if (launcherXReady) return;
+        String enabled = uiShell(app, "pm enable " + LAUNCHERX);
+        if (!enabled.contains("new state: enabled") && !enabled.contains("already enabled")) {
+            throw new IOException("LauncherX could not be enabled");
+        }
+        launcherXReady = true;
+    }
+
+    private static void openLauncherSurface(Context context, String component, boolean dashboard) {
+        if (!isG15()) return;
+        synchronized (HomeMode.class) {
+            if (originalUiOpening) return;
+            originalUiOpening = true;
+        }
+        Context app = context.getApplicationContext();
+        ORIGINAL_UI.execute(() -> {
+            try {
+                ensureLauncherX(app);
+                String command = dashboard
+                        ? "am start -a android.app.action.TOGGLE_NOTIFICATION_HANDLER_PANEL -n " + component
+                        : "am start -n " + component;
+                String launched = uiShell(app, command);
+                if (!launched.contains("Starting:")) AppLog.w("Google TV surface launch: " + launched.trim());
+            } catch (IOException | RuntimeException e) {
+                AppLog.w("Google TV surface: " + e.getClass().getSimpleName());
+            } finally {
+                synchronized (HomeMode.class) { originalUiOpening = false; }
+            }
+        });
+    }
+
     /** Our home screen crashed 3 times in 5 minutes: give the home screen back to the TV's own (asked by :home). */
     static void requestRevertHome(Context c) {
         ModeJob.schedule(c, ModeJob.REVERT, null, 0);
@@ -233,8 +333,26 @@ final class HomeMode {
     /** After the TV boots (and after a TV update): wait for the system to settle and check Free My TV mode. */
     static void bootCheck(Context c) {
         if (AMAZON) return;
-        ensureRemoteService(c, 30_000);
+        ensureRemoteService(c, 0);
+        // Some TCL Google TV builds launch LauncherX explicitly during boot even when Free My TV
+        // owns the HOME role. Bring our home back as soon as the boot receiver can schedule work.
+        ModeJob.schedule(c, ModeJob.BOOT_HOME, null, 0);
         ModeJob.schedule(c, ModeJob.VERIFY, null, 45_000);
+    }
+
+    /** Restore the selected launcher after TCL firmware's explicit LauncherX startup. */
+    static void bootHomeNow(Context app) {
+        JSONObject s = state(app);
+        if (!FREE.equals(s.optString("mode")) || s.optBoolean("homeReverted")) return;
+        try (Adb adb = Adb.connect(app, 10_000, null)) {
+            if (!homeHolder(adb).contains(PKG)) return;
+            String out = adb.shell("am start -n " + HOME_ACTIVITY);
+            if (!out.contains("Starting:") && !out.contains("Warning:")) {
+                AppLog.w("could not restore Free My TV after boot: " + out.trim());
+            }
+        } catch (IOException e) {
+            AppLog.w("could not restore Free My TV after boot: " + e.getMessage());
+        }
     }
 
     /** After an update of this app: complete Free My TV mode if anything is missing. */
@@ -437,6 +555,12 @@ final class HomeMode {
             for (String pkg : targets) {
                 done++;
                 busy(c, Ui.trf("Turning off apps ({done}/{total})…", "done", done, "total", targets.size()));
+                // On this Google TV build LauncherX owns the original Settings overlay. Keep it enabled so the
+                // dashboard stays warm and can open from the remote without a disable/enable cycle.
+                if (isG15() && LAUNCHERX.equals(pkg)) {
+                    disabled.remove(pkg);
+                    continue;
+                }
                 if (!candidates.contains(pkg) || needed.contains(pkg) || owners.contains(pkg) || keptOff.contains(pkg)) continue;
                 // The TV's home screen only once Google TV's setup app is off: its recovery screen would take Home.
                 if (pkg.equals(homePkg) && setupOn) {
@@ -485,7 +609,7 @@ final class HomeMode {
             String home = originalHome(s);
             Set<String> toEnable = new HashSet<>(stringList(s, "disabled"));
             for (String pkg : targets(home, originalDream(s), true)) {
-                if (!Arrays.asList(DEBLOAT).contains(pkg) && !Arrays.asList(ASSISTANT).contains(pkg)) toEnable.add(pkg);
+                if (!isDebloat(pkg) && !Arrays.asList(ASSISTANT).contains(pkg)) toEnable.add(pkg);
             }
             toEnable.removeAll(stringList(s, "keptOff"));
             Set<String> present = packages(adb, "");
@@ -737,6 +861,12 @@ final class HomeMode {
                 boolean setupOn = present.contains(GOOGLE_SETUP) && !disabledNow.contains(GOOGLE_SETUP)
                         && s.optBoolean("setupHome", true);
                 for (String pkg : order) {
+                    // LauncherX stays enabled for the native Settings overlay; its Home activity is redirected by
+                    // RemoteKeyService while Free My TV mode is active.
+                    if (isG15() && LAUNCHERX.equals(pkg)) {
+                        disabled.remove(pkg);
+                        continue;
+                    }
                     if (!mayTurnOff(pkg) || !present.contains(pkg) || owners.contains(pkg) || wait.contains(pkg)) continue;
                     if (pkg.equals(HTC_HOME) && !jmOurs) continue;
                     if (disabledNow.contains(pkg)) {
@@ -807,7 +937,7 @@ final class HomeMode {
         String dreamPkg = packageOf(dream);
         // screensaver=false keeps the TV's own screensaver: then it stays on.
         if (Config.SCREENSAVER && dreamPkg != null && !dreamPkg.equals(PKG) && !dreamPkg.equals(homePkg)) out.add(dreamPkg);
-        out.addAll(Arrays.asList(DEBLOAT));
+        for (String pkg : DEBLOAT) if (isDebloat(pkg)) out.add(pkg);
         if (Config.DISABLE_ASSISTANT) out.addAll(Arrays.asList(ASSISTANT));
         return out;
     }
@@ -987,7 +1117,7 @@ final class HomeMode {
         String home = packageOf(originalHome(state(c)));
         String[] processes = FREE.equals(mode) ? new String[] {PKG + ":home"}
                 : home == null ? new String[0] : new String[] {home, home + ":coreservices"};
-        Pattern total = Pattern.compile("TOTAL PSS:\\s+(\\d+)");
+        Pattern total = Pattern.compile("TOTAL(?: PSS)?:\\s+(\\d+)");
         for (String p : processes) {
             Matcher m = total.matcher(adb.shell("dumpsys meminfo " + p));
             if (m.find()) pss += Long.parseLong(m.group(1));
