@@ -1,20 +1,27 @@
 package io.freemytv;
 
 import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Outline;
+import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.RectF;
+import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
 import android.os.Bundle;
 import android.speech.RecognizerIntent;
 import android.text.TextUtils;
 import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewOutlineProvider;
 import android.view.inputmethod.EditorInfo;
-import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
@@ -28,22 +35,27 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/** Voice-first search across the TV's Nuvio launch catalog and SmartTube's searchable video provider. */
+/** Compact, source-grouped Android TV search. The Google recognizer supplies transcription only. */
 public final class VoiceSearchActivity extends Activity {
     private static final int VOICE_REQUEST = 418;
+    private static final int SEARCH = 0, MIC = 1;
     private static final ExecutorService IMAGES = Executors.newFixedThreadPool(3);
     private EditText queryField;
     private TextView status;
     private LinearLayout results;
-    private Button voiceButton;
+    private IconAction micButton;
     private int generation;
 
-    static void open(android.content.Context context) {
+    static void open(Context context) { open(context, true); }
+
+    static void openSearch(Context context) { open(context, false); }
+
+    private static void open(Context context, boolean voice) {
         context.startActivity(new Intent(context, VoiceSearchActivity.class)
+                .putExtra("voice", voice)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP));
     }
 
@@ -51,75 +63,66 @@ public final class VoiceSearchActivity extends Activity {
         super.onCreate(state);
         buildUi();
         getWindow().setBackgroundDrawableResource(android.R.color.transparent);
-        if (getIntent().getBooleanExtra("voice", true)) getWindow().getDecorView().postDelayed(this::startVoice, 250);
+        if (getIntent().getBooleanExtra("voice", false)) getWindow().getDecorView().postDelayed(this::startVoice, 220);
+        else queryField.requestFocus();
     }
 
     private void buildUi() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(0xFFF3F6FA);
-        root.setPadding(dp(42), dp(24), dp(42), dp(24));
+        root.setPadding(dp(46), dp(24), dp(46), dp(20));
 
         TextView heading = new TextView(this);
-        heading.setText("Buscar");
+        heading.setText(Ui.tr("Search"));
         heading.setTextColor(0xFF172033);
-        heading.setTextSize(30);
-        heading.setTypeface(android.graphics.Typeface.create("sans-serif-medium", 0));
+        heading.setTextSize(29);
+        heading.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         root.addView(heading, new LinearLayout.LayoutParams(-1, dp(48)));
 
         LinearLayout searchRow = new LinearLayout(this);
         searchRow.setGravity(Gravity.CENTER_VERTICAL);
-        searchRow.setPadding(dp(18), 0, dp(10), 0);
+        searchRow.setPadding(dp(20), 0, dp(8), 0);
         GradientDrawable searchBg = new GradientDrawable();
-        searchBg.setColor(Color.WHITE); searchBg.setCornerRadius(dp(22)); searchBg.setStroke(dp(1), 0xFFD6DEE8);
+        searchBg.setColor(Color.WHITE); searchBg.setCornerRadius(dp(24)); searchBg.setStroke(dp(1), 0xFFD6DEE8);
         searchRow.setBackground(searchBg);
         queryField = new EditText(this);
-        queryField.setSingleLine(true); queryField.setTextSize(23); queryField.setTextColor(0xFF172033);
-        queryField.setHintTextColor(0xFF7A8797); queryField.setHint("Nome de filme, série ou vídeo");
+        queryField.setSingleLine(true); queryField.setTextSize(22); queryField.setTextColor(0xFF172033);
+        queryField.setHintTextColor(0xFF7A8797); queryField.setHint("Filme, série, vídeo ou música");
         queryField.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
         queryField.setBackgroundColor(Color.TRANSPARENT);
-        searchRow.addView(queryField, new LinearLayout.LayoutParams(0, dp(62), 1));
-        voiceButton = button("Falar");
-        voiceButton.setOnClickListener(v -> startVoice());
-        searchRow.addView(voiceButton, new LinearLayout.LayoutParams(dp(130), dp(52)));
-        Button searchButton = button("Buscar");
+        queryField.setSelectAllOnFocus(false);
+        searchRow.addView(queryField, new LinearLayout.LayoutParams(0, dp(64), 1));
+        micButton = new IconAction(this, MIC, Ui.tr("Voice search"));
+        micButton.setOnClickListener(v -> startVoice());
+        searchRow.addView(micButton, new LinearLayout.LayoutParams(dp(54), dp(54)));
+        IconAction searchButton = new IconAction(this, SEARCH, Ui.tr("Search"));
         searchButton.setOnClickListener(v -> search(queryField.getText().toString()));
-        searchRow.addView(searchButton, new LinearLayout.LayoutParams(dp(140), dp(52)));
+        searchRow.addView(searchButton, new LinearLayout.LayoutParams(dp(54), dp(54)));
         root.addView(searchRow, new LinearLayout.LayoutParams(-1, dp(72)));
         queryField.setOnEditorActionListener((v, action, event) -> {
-            if (action == EditorInfo.IME_ACTION_SEARCH || action == EditorInfo.IME_ACTION_DONE) {
+            if (action == EditorInfo.IME_ACTION_SEARCH || action == EditorInfo.IME_ACTION_DONE
+                    || (event != null && event.getKeyCode() == KeyEvent.KEYCODE_ENTER)) {
                 search(queryField.getText().toString()); return true;
             }
             return false;
         });
 
         status = new TextView(this);
-        status.setTextColor(0xFF667487); status.setTextSize(19); status.setPadding(dp(8), dp(16), dp(8), dp(8));
-        status.setText("Fale um título ou digite para pesquisar.");
-        root.addView(status, new LinearLayout.LayoutParams(-1, dp(56)));
+        status.setTextColor(0xFF667487); status.setTextSize(17);
+        status.setPadding(dp(6), dp(12), dp(6), dp(8));
+        status.setText("Digite ou dite para pesquisar nos apps compatíveis.");
+        root.addView(status, new LinearLayout.LayoutParams(-1, dp(48)));
 
         ScrollView vertical = new ScrollView(this);
         vertical.setFillViewport(false);
+        vertical.setClipToPadding(false);
+        vertical.setVerticalScrollBarEnabled(false);
         results = new LinearLayout(this); results.setOrientation(LinearLayout.VERTICAL);
+        results.setPadding(0, dp(2), 0, dp(28));
         vertical.addView(results, new ScrollView.LayoutParams(-1, -2));
         root.addView(vertical, new LinearLayout.LayoutParams(-1, 0, 1));
         setContentView(root);
-    }
-
-    private Button button(String label) {
-        Button button = new Button(this);
-        button.setText(label); button.setTextSize(17); button.setTextColor(Color.WHITE);
-        button.setAllCaps(false); button.setFocusable(true); button.setBackground(tint(0xFF5D9BD1, 0xFF397EB9));
-        return button;
-    }
-
-    private android.graphics.drawable.StateListDrawable tint(int normal, int focused) {
-        android.graphics.drawable.StateListDrawable state = new android.graphics.drawable.StateListDrawable();
-        GradientDrawable selected = new GradientDrawable(); selected.setColor(focused); selected.setCornerRadius(dp(18));
-        GradientDrawable idle = new GradientDrawable(); idle.setColor(normal); idle.setCornerRadius(dp(18));
-        state.addState(new int[] {android.R.attr.state_focused}, selected);
-        state.addState(new int[] {}, idle);
-        return state;
     }
 
     private void startVoice() {
@@ -131,13 +134,13 @@ public final class VoiceSearchActivity extends Activity {
             voice.putExtra(RecognizerIntent.EXTRA_PROMPT, "O que você quer encontrar?");
             voice.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
             if (voice.resolveActivity(getPackageManager()) == null) {
-                status.setText("Busca por voz indisponível. Digite o título para pesquisar.");
+                status.setText("Busca por voz indisponível. Digite para pesquisar.");
                 queryField.requestFocus();
                 return;
             }
             startActivityForResult(voice, VOICE_REQUEST);
         } catch (RuntimeException e) {
-            status.setText("Busca por voz indisponível. Digite o título para pesquisar.");
+            status.setText("Busca por voz indisponível. Digite para pesquisar.");
             AppLog.w("voice recognizer: " + e.getClass().getSimpleName());
         }
     }
@@ -150,96 +153,182 @@ public final class VoiceSearchActivity extends Activity {
             queryField.setText(phrases.get(0));
             search(phrases.get(0));
         } else {
-            status.setText("Não consegui entender. Fale novamente ou digite o título.");
-            voiceButton.requestFocus();
+            status.setText("Não consegui entender. Tente novamente ou digite o título.");
+            micButton.requestFocus();
         }
     }
 
     private void search(String raw) {
         String query = raw == null ? "" : raw.trim();
         if (query.length() < 2) {
-            status.setText("Digite ou fale pelo menos dois caracteres.");
+            status.setText("Digite ou dite pelo menos dois caracteres.");
+            queryField.requestFocus();
             return;
         }
         queryField.setText(query);
-        status.setText("Pesquisando em filmes, séries e vídeos…");
+        status.setText("Pesquisando nos apps disponíveis…");
         results.removeAllViews();
         final int request = ++generation;
-        UnifiedSearch.search(this, query, (nuvio, smartTube, error) -> runOnUiThread(() -> {
+        UnifiedSearch.search(this, query, sections -> runOnUiThread(() -> {
             if (request != generation || isFinishing()) return;
-            boolean found = !nuvio.isEmpty() || !smartTube.isEmpty();
-            status.setText(found ? "Resultados para “" + query + "”" : "Nenhum resultado para “" + query + "”.");
-            if (!nuvio.isEmpty()) addSection("Filmes e séries", nuvio);
-            if (!smartTube.isEmpty()) addSection("Vídeos", smartTube);
+            boolean found = false;
+            for (UnifiedSearch.Section section : sections) {
+                if (section.hits.isEmpty()) continue;
+                addSection(section);
+                found = true;
+            }
+            status.setText(found ? "Resultados para “" + query + "”" : "Nenhum resultado nos apps compatíveis para “" + query + "”.");
             if (!found) queryField.requestFocus();
         }));
     }
 
-    private void addSection(String title, List<UnifiedSearch.Hit> hits) {
+    private void addSection(UnifiedSearch.Section section) {
+        LinearLayout heading = new LinearLayout(this);
+        heading.setGravity(Gravity.CENTER_VERTICAL);
+        heading.setPadding(dp(4), dp(10), 0, dp(9));
+        ImageView appIcon = new ImageView(this);
+        try { appIcon.setImageDrawable(getPackageManager().getApplicationIcon(section.packageName)); }
+        catch (Exception ignored) { }
+        heading.addView(appIcon, new LinearLayout.LayoutParams(dp(28), dp(28)));
         TextView label = new TextView(this);
-        label.setText(title); label.setTextColor(0xFF263346); label.setTextSize(24);
-        label.setTypeface(android.graphics.Typeface.create("sans-serif-medium", 0));
-        label.setPadding(dp(8), dp(8), 0, dp(12));
-        results.addView(label, new LinearLayout.LayoutParams(-1, dp(52)));
+        label.setText(section.name); label.setTextColor(0xFF263346); label.setTextSize(21);
+        label.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        label.setPadding(dp(10), 0, 0, 0);
+        heading.addView(label, new LinearLayout.LayoutParams(-2, -2));
+        TextView arrows = new TextView(this);
+        arrows.setText("‹     ›"); arrows.setTextColor(0xFF6F8DAB); arrows.setTextSize(22);
+        arrows.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+        arrows.setPadding(0, 0, dp(8), 0);
+        arrows.setVisibility(section.hits.size() > 3 ? View.VISIBLE : View.INVISIBLE);
+        heading.addView(arrows, new LinearLayout.LayoutParams(0, -1, 1));
+        results.addView(heading, new LinearLayout.LayoutParams(-1, dp(48)));
 
         HorizontalScrollView horizontal = new HorizontalScrollView(this);
         horizontal.setHorizontalScrollBarEnabled(false); horizontal.setClipToPadding(false);
         LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setPadding(dp(4), dp(4), dp(14), dp(16));
-        for (UnifiedSearch.Hit hit : hits) row.addView(card(hit));
+        row.setPadding(dp(3), dp(4), dp(22), dp(15));
+        for (UnifiedSearch.Hit hit : section.hits) row.addView(card(hit, section.layout));
         horizontal.addView(row, new HorizontalScrollView.LayoutParams(-2, -2));
+        horizontal.setOnScrollChangeListener((v, scrollX, scrollY, oldX, oldY) -> {
+            if (section.hits.size() <= 3) return;
+            boolean left = scrollX > dp(4);
+            boolean right = scrollX + horizontal.getWidth() < row.getWidth() - dp(4);
+            arrows.setText((left ? "‹" : " ") + "     " + (right ? "›" : " "));
+        });
         results.addView(horizontal, new LinearLayout.LayoutParams(-1, -2));
     }
 
-    private View card(UnifiedSearch.Hit hit) {
-        boolean wide = hit.smartTube;
-        int cardWidth = dp(wide ? 360 : 240);
+    private View card(UnifiedSearch.Hit hit, int layout) {
+        int cardWidth = dp(layout == UnifiedSearch.POSTER ? 154 : layout == UnifiedSearch.SQUARE ? 168 : 270);
+        int artHeight = dp(layout == UnifiedSearch.POSTER ? 228 : layout == UnifiedSearch.SQUARE ? 168 : 152);
         LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL);
-        card.setFocusable(true); card.setClickable(true); card.setClipToOutline(true); card.setElevation(dp(5));
+        card.setFocusable(true); card.setClickable(true); card.setElevation(dp(4));
         card.setBackground(cardBackground(false));
-        card.setPadding(0, 0, 0, dp(10));
-        card.setOnFocusChangeListener((v, focused) -> v.setBackground(cardBackground(focused)));
-        card.setOnClickListener(v -> { hit.open(this); finish(); });
+        card.setOnFocusChangeListener((v, focused) -> {
+            v.setBackground(cardBackground(focused)); v.setElevation(dp(focused ? 11 : 4));
+        });
+        card.setOnClickListener(v -> { hit.open(this); });
 
-        FrameLayout artFrame = new FrameLayout(this);
-        ImageView image = new ImageView(this); image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        TopRoundedImageView image = new TopRoundedImageView(this);
+        image.setScaleType(ImageView.ScaleType.CENTER_CROP);
         image.setBackgroundColor(0xFFDCE5EF);
-        artFrame.addView(image, new FrameLayout.LayoutParams(-1, -1));
-        card.addView(artFrame, new LinearLayout.LayoutParams(cardWidth, dp(wide ? 202 : 300)));
-        TextView name = new TextView(this); name.setText(hit.title); name.setTextColor(0xFF172033);
-        name.setTextSize(18); name.setMaxLines(2); name.setEllipsize(TextUtils.TruncateAt.END);
-        name.setTypeface(android.graphics.Typeface.create("sans-serif-medium", 0));
-        name.setPadding(dp(14), dp(12), dp(14), dp(2));
-        card.addView(name, new LinearLayout.LayoutParams(cardWidth, -2));
-        TextView meta = new TextView(this); meta.setText(TextUtils.isEmpty(hit.detail) ? hit.source : hit.detail);
-        meta.setTextColor(0xFF6B7584); meta.setTextSize(15); meta.setMaxLines(1); meta.setEllipsize(TextUtils.TruncateAt.END);
-        meta.setPadding(dp(14), 0, dp(14), 0);
-        card.addView(meta, new LinearLayout.LayoutParams(cardWidth, dp(30)));
+        card.addView(image, new LinearLayout.LayoutParams(cardWidth, artHeight));
+        LinearLayout caption = new LinearLayout(this); caption.setOrientation(LinearLayout.VERTICAL);
+        caption.setGravity(Gravity.CENTER_VERTICAL);
+        caption.setPadding(dp(12), dp(8), dp(12), dp(8));
+        GradientDrawable captionBg = new GradientDrawable();
+        captionBg.setColor(Color.WHITE); captionBg.setCornerRadii(new float[] {0, 0, 0, 0, dp(15), dp(15), dp(15), dp(15)});
+        caption.setBackground(captionBg);
+        TextView title = new TextView(this); title.setText(hit.title); title.setTextColor(0xFF172033);
+        title.setTextSize(16); title.setMaxLines(2); title.setEllipsize(TextUtils.TruncateAt.END);
+        title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        caption.addView(title, new LinearLayout.LayoutParams(-1, -2));
+        if (!TextUtils.isEmpty(hit.detail)) {
+            TextView detail = new TextView(this); detail.setText(hit.detail); detail.setTextColor(0xFF687587);
+            detail.setTextSize(13); detail.setMaxLines(1); detail.setEllipsize(TextUtils.TruncateAt.END);
+            LinearLayout.LayoutParams detailLp = new LinearLayout.LayoutParams(-1, -2);
+            detailLp.topMargin = dp(3);
+            caption.addView(detail, detailLp);
+        }
+        card.addView(caption, new LinearLayout.LayoutParams(cardWidth, dp(58)));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(cardWidth, -2);
+        lp.rightMargin = dp(14);
+        card.setLayoutParams(lp);
 
-        if (!TextUtils.isEmpty(hit.image)) IMAGES.execute(() -> {
-            Bitmap bitmap = download(hit.image);
+        if (hit.imageUri != null) IMAGES.execute(() -> {
+            Bitmap bitmap = loadImage(hit.imageUri);
             if (bitmap != null && !isFinishing()) runOnUiThread(() -> image.setImageBitmap(bitmap));
         });
         return card;
     }
 
+    private Bitmap loadImage(Uri uri) {
+        try {
+            if ("http".equals(uri.getScheme()) || "https".equals(uri.getScheme())) {
+                HttpURLConnection connection = (HttpURLConnection) new URL(uri.toString()).openConnection();
+                connection.setConnectTimeout(5000); connection.setReadTimeout(7000);
+                connection.setRequestProperty("User-Agent", "FreeMyTV/1.2 AndroidTV");
+                try (InputStream stream = connection.getInputStream()) { return BitmapFactory.decodeStream(stream); }
+                finally { connection.disconnect(); }
+            }
+            try (InputStream stream = getContentResolver().openInputStream(uri)) { return BitmapFactory.decodeStream(stream); }
+        } catch (Exception ignored) { return null; }
+    }
+
     private GradientDrawable cardBackground(boolean focused) {
         GradientDrawable d = new GradientDrawable();
-        d.setColor(Color.WHITE); d.setCornerRadius(dp(18));
-        d.setStroke(dp(focused ? 3 : 1), focused ? 0xFF5D9BD1 : 0xFFD8E0E9);
+        d.setColor(Color.WHITE); d.setCornerRadius(dp(15));
+        d.setStroke(dp(focused ? 3 : 1), focused ? 0xFF4F8FC9 : 0xFFD8E0E9);
         return d;
     }
 
-    private Bitmap download(String address) {
-        HttpURLConnection connection = null;
-        try {
-            connection = (HttpURLConnection) new URL(address).openConnection();
-            connection.setConnectTimeout(5000); connection.setReadTimeout(7000);
-            connection.setRequestProperty("User-Agent", "FreeMyTV/1.2 AndroidTV");
-            try (InputStream stream = connection.getInputStream()) { return BitmapFactory.decodeStream(stream); }
-        } catch (Exception ignored) { return null; }
-        finally { if (connection != null) connection.disconnect(); }
+    private int dp(float value) { return Math.round(value * getResources().getDisplayMetrics().density); }
+
+    private final class IconAction extends View {
+        private final int kind;
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        IconAction(Context context, int kind, String description) {
+            super(context); this.kind = kind;
+            setFocusable(true); setClickable(true); setContentDescription(description);
+            setOnFocusChangeListener((v, focused) -> invalidate());
+        }
+
+        @Override protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            float cx = getWidth() / 2f, cy = getHeight() / 2f;
+            boolean focused = isFocused();
+            paint.setStyle(Paint.Style.FILL); paint.setColor(focused ? 0xFF5D9BD1 : 0xFFE8EFF6);
+            canvas.drawCircle(cx, cy, dp(22), paint);
+            paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(dp(2.4f));
+            paint.setStrokeCap(Paint.Cap.ROUND); paint.setStrokeJoin(Paint.Join.ROUND);
+            paint.setColor(focused ? Color.WHITE : 0xFF30445B);
+            if (kind == SEARCH) {
+                canvas.drawCircle(cx - dp(3), cy - dp(3), dp(7), paint);
+                canvas.drawLine(cx + dp(2), cy + dp(2), cx + dp(8), cy + dp(8), paint);
+            } else {
+                RectF mic = new RectF(cx - dp(5), cy - dp(12), cx + dp(5), cy + dp(4));
+                paint.setStyle(Paint.Style.FILL); canvas.drawRoundRect(mic, dp(5), dp(5), paint);
+                paint.setStyle(Paint.Style.STROKE);
+                canvas.drawArc(cx - dp(10), cy - dp(6), cx + dp(10), cy + dp(13), 0, 180, false, paint);
+                canvas.drawLine(cx, cy + dp(13), cx, cy + dp(18), paint);
+                canvas.drawLine(cx - dp(5), cy + dp(18), cx + dp(5), cy + dp(18), paint);
+            }
+        }
     }
 
-    private int dp(float value) { return Math.round(value * getResources().getDisplayMetrics().density); }
+    /** Poster image has square lower corners; only the text base is rounded, so each result reads as one card. */
+    private final class TopRoundedImageView extends ImageView {
+        private final Path clip = new Path();
+        private final RectF bounds = new RectF();
+        TopRoundedImageView(Context context) { super(context); }
+        @Override protected void onDraw(Canvas canvas) {
+            bounds.set(0, 0, getWidth(), getHeight());
+            float r = dp(15);
+            clip.reset();
+            clip.moveTo(0, r); clip.quadTo(0, 0, r, 0); clip.lineTo(getWidth() - r, 0);
+            clip.quadTo(getWidth(), 0, getWidth(), r); clip.lineTo(getWidth(), getHeight());
+            clip.lineTo(0, getHeight()); clip.close();
+            int save = canvas.save(); canvas.clipPath(clip); super.onDraw(canvas); canvas.restoreToCount(save);
+        }
+    }
 }

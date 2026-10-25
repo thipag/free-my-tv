@@ -210,9 +210,10 @@ final class HomeApps {
 
     // MARK: - Top buttons (the round ones at the top right)
 
-    static final String TOP_HOME_SETTINGS = "home-settings", TOP_TV_SETTINGS = "tv-settings", TOP_ACCOUNT = "account", TOP_MIRROR = "mirror";
+    static final String TOP_HOME_SETTINGS = "home-settings", TOP_TV_SETTINGS = "tv-settings", TOP_ACCOUNT = "account",
+            TOP_MIRROR = "mirror", TOP_SEARCH = "search";
     static final List<String> TOP_DEFAULT = Collections.unmodifiableList(java.util.Arrays.asList(
-            TOP_HOME_SETTINGS, TOP_TV_SETTINGS));
+            TOP_HOME_SETTINGS, TOP_TV_SETTINGS, TOP_SEARCH));
     static final int MAX_TOP = TOP_DEFAULT.size();
 
     /** The keys of the top buttons, in order (Home Settings and TV Settings). */
@@ -221,6 +222,7 @@ final class HomeApps {
         if (saved == null) return TOP_DEFAULT;
         List<String> keys = new ArrayList<>();
         for (String key : saved) if (TOP_DEFAULT.contains(key) && !keys.contains(key)) keys.add(key);
+        if (!keys.contains(TOP_SEARCH)) keys.add(TOP_SEARCH);
         return keys;
     }
 
@@ -235,6 +237,7 @@ final class HomeApps {
         switch (key) {
             case TOP_HOME_SETTINGS: return action(SETTINGS, TOP_HOME_SETTINGS, Ui.tr("Home Settings"), "settings");
             case TOP_TV_SETTINGS: return action(ANDROID_SETTINGS, TOP_TV_SETTINGS, Ui.tr("TV Settings"), "tv_settings");
+            case TOP_SEARCH: return action(VOICE_SEARCH, TOP_SEARCH, Ui.tr("Search"), "search");
             case TOP_ACCOUNT: return action(ACCOUNT_SETTINGS, TOP_ACCOUNT, Ui.tr("Google account"), "account");
             default: return action(ACCOUNT_SETTINGS, TOP_ACCOUNT, Ui.tr("Google account"), "account");
         }
@@ -479,7 +482,7 @@ final class HomeApps {
             return true;
         }
         if (it.kind == VOICE_SEARCH) {
-            VoiceSearchActivity.open(a);
+            VoiceSearchActivity.openSearch(a);
             return true;
         }
         Intent intent, plain = null;   // plain: the app's own home, when it won't take the title's address
