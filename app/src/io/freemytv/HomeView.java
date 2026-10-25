@@ -3226,7 +3226,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         RectF group = new RectF(left, cy - 38 * k, right, cy + 38 * k);
         drawBlueSurface(c, group, 28 * k);
 
-        String brand = "FreeMyTV " + Config.APP_VERSION;
+        String brand = "FreeMyTV " + Config.APP_VERSION + " · " + Config.APP_BUILD;
         Paint brandPaint = Ui.text(Ui.semibold, 21 * k, WHITE);
         float baseline = cy + Ui.halfCap(brandPaint);
         float brandX = left + 24 * k;

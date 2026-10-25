@@ -57,6 +57,8 @@ ANIMATION=false; [ "$(prop hide_animation false)" = "true" ] && ANIMATION=true
 SAVER=true; [ "$(prop screensaver true)" = "false" ] && SAVER=false
 APP_VERSION="$(sed -n 's/.*android:versionName="\([^"]*\)".*/\1/p' app/AndroidManifest.xml | head -1)"
 [ -n "$APP_VERSION" ] || { echo "Could not read android:versionName from app/AndroidManifest.xml" >&2; exit 1; }
+APP_BUILD="$(git rev-parse --short=7 HEAD 2>/dev/null || printf 'local')"
+if [ -n "$(git status --porcelain 2>/dev/null)" ]; then APP_BUILD="${APP_BUILD}-dirty"; fi
 
 rm -rf out && mkdir -p out/gen/io/freemytv out/classes
 cat > out/gen/io/freemytv/Config.java <<EOF
@@ -67,6 +69,7 @@ final class Config {
     private Config() {}
 
     static final String APP_VERSION = "$APP_VERSION";
+    static final String APP_BUILD = "$APP_BUILD";
     static final String TMDB_KEY = "$(prop tmdb_key '')";
     static final String WATCHMODE_KEY = "$(prop watchmode_key '')";
     static final String TMDB_REGION = "$REGION";
