@@ -145,7 +145,8 @@ public final class TvQuickPanelActivity extends Activity {
             Intent intent;
             switch (row) {
                 case 0: intent = new Intent(Settings.ACTION_DISPLAY_SETTINGS).setPackage("com.android.tv.settings"); break;
-                case 1: intent = new Intent(Settings.ACTION_SOUND_SETTINGS).setPackage("com.android.tv.settings"); break;
+                case 1: intent = new Intent("com.android.tv.action.VIEW_SOUND_SETTINGS")
+                        .setPackage("com.android.tv.settings"); break;
                 case 3: intent = new Intent("com.android.tv.action.VIEW_INPUTS").setPackage("com.tcl.suspension"); break;
                 case 4: intent = new Intent(Settings.Panel.ACTION_WIFI).setPackage("com.android.tv.settings"); break;
                 case 5: intent = new Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS).setPackage("com.android.tv.settings"); break;

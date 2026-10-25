@@ -3220,18 +3220,20 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (lightButtons.isEmpty()) return;
         int firstAction = tabs().length;
         int lastAction = firstAction + lightButtons.size() - 1;
-        float left = Math.max((MARGIN + 30) * k, topRects[firstAction].left - 420 * k);
+        String brand = "FreeMyTV " + Config.APP_VERSION + " · " + Config.APP_BUILD;
+        Paint brandPaint = Ui.text(Ui.semibold, 21 * k, WHITE);
+        Paint clockPaint = Ui.text(Ui.semibold, 27 * k, WHITE);
+        float textWidth = brandPaint.measureText(brand) + 30 * k + clockPaint.measureText(clockText);
+        float left = Math.max((MARGIN + 30) * k,
+                topRects[firstAction].left - 58 * k - textWidth);
         float right = topRects[lastAction].right + 18 * k;
         float cy = L_BUTTON_CY * k;
         RectF group = new RectF(left, cy - 38 * k, right, cy + 38 * k);
         drawBlueSurface(c, group, 28 * k);
 
-        String brand = "FreeMyTV " + Config.APP_VERSION + " · " + Config.APP_BUILD;
-        Paint brandPaint = Ui.text(Ui.semibold, 21 * k, WHITE);
         float baseline = cy + Ui.halfCap(brandPaint);
         float brandX = left + 24 * k;
         c.drawText(brand, brandX, baseline, brandPaint);
-        Paint clockPaint = Ui.text(Ui.semibold, 27 * k, WHITE);
         float clockX = brandX + brandPaint.measureText(brand) + 30 * k;
         c.drawText(clockText, clockX, cy + Ui.halfCap(clockPaint), clockPaint);
         float dividerX = topRects[firstAction].left - 18 * k;
