@@ -405,9 +405,16 @@ final class Ui {
         }
     }
 
-    /** "21:47" (in English, "9:47", like the iPhone in the US). */
+    /** A clock in the selected locale, without seconds (for the screen saver). */
     static String clock(long now) {
-        return Ui.datePattern("format|h:mm").format(now);
+        DatePattern p = Ui.datePattern("format|h:mm");
+        return new SimpleDateFormat(p.text, p.locale).format(new Date(now));
+    }
+
+    /** A live clock in the selected locale, including seconds (for the home header). */
+    static String clockWithSeconds(long now) {
+        DatePattern p = Ui.datePattern("format|h:mm");
+        return new SimpleDateFormat(p.text + ":ss", p.locale).format(new Date(now));
     }
 
     /** "5:21" (sunrise and sunset; in English, "5:21 AM"). */

@@ -45,6 +45,41 @@ final class RemoteKeys {
         return TCL || STEM_NETFLIX || KTC || SONY || XIAOMI;
     }
 
+    static boolean tclSettingsKey(KeyEvent event) {
+        return TCL && event != null && (event.getKeyCode() == KeyEvent.KEYCODE_NOTIFICATION
+                || event.getKeyCode() == KeyEvent.KEYCODE_SETTINGS);
+    }
+
+    static boolean homeKey(KeyEvent event) {
+        return TCL && "G15".equalsIgnoreCase(Build.DEVICE) && event != null
+                && event.getKeyCode() == KeyEvent.KEYCODE_HOME;
+    }
+
+    static void openFreeHome(Context context) {
+        Intent home = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+                .setComponent(new android.content.ComponentName("io.freemytv", "io.freemytv.HomeActivity"))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        try { context.startActivity(home); }
+        catch (RuntimeException e) { AppLog.w("Free My TV Home key: " + e.getClass().getSimpleName()); }
+    }
+
+    /** Original Google TV dashboard on LauncherX; older TCL builds retain their own quick panel service. */
+    static boolean openTclQuickPanel(Context context) {
+        if ("G15".equalsIgnoreCase(Build.DEVICE)) {
+            HomeMode.openLauncherDashboard(context);
+            return true;
+        }
+        Intent panel = new Intent("com.tcl.quickpanel.show.window")
+                .setComponent(new android.content.ComponentName("com.tcl.suspension", "com.tcl.suspension.DismissService"));
+        try {
+            context.startService(panel);
+            return true;
+        } catch (RuntimeException e) {
+            AppLog.w("TCL quick panel: " + e.getClass().getSimpleName());
+            return false;
+        }
+    }
+
     private static boolean is(String maker) {
         return maker.equalsIgnoreCase(Build.MANUFACTURER) || maker.equalsIgnoreCase(Build.BRAND);
     }
@@ -56,6 +91,7 @@ final class RemoteKeys {
         int source = e.getSource();
         if ((source & InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD
                 || (source & InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK) return false;
+        int rawCode = e.getKeyCode();
         int keyCode = e.getKeyCode() == KEY_YOUTUBE_TCL ? Prefs.KEY_YOUTUBE : e.getKeyCode();
         // Sony sends BUTTON_9 for five app buttons (BUTTON_4 for Netflix, BUTTON_8 for Google Play): only the scan code
         // tells them apart.
@@ -69,13 +105,16 @@ final class RemoteKeys {
         String pkg = Prefs.keyApp(keyCode);
         if (pkg.isEmpty()) return false;   // "Nothing": the key goes on as if we weren't here
         if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) {
-            // Our own package means the home screen in use (Xiaomi's Mi button): ours, or the TV's own after the
-            // watchdog handed it back. Not the settings app our launcher icon opens.
-            Intent intent = pkg.equals(HomeMode.PKG)
-                    ? new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
-                    : launchIntent(c.getPackageManager(), pkg);
-            AppLog.w("remote key " + e.getKeyCode() + " -> " + pkg + (intent == null ? " (not installed)" : ""));
-            if (intent != null) c.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            // Use the explicit home component: this TCL resolver can still select LauncherX for implicit HOME,
+            // even while Free My TV holds the Home role.
+            if (pkg.equals(HomeMode.PKG)) {
+                AppLog.w("remote key " + e.getKeyCode() + " -> " + pkg);
+                openFreeHome(c);
+            } else {
+                Intent intent = launchIntent(c.getPackageManager(), pkg);
+                AppLog.w("remote key " + e.getKeyCode() + " -> " + pkg + (intent == null ? " (not installed)" : ""));
+                if (intent != null) c.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            }
         }
         return true;
     }

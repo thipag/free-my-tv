@@ -58,7 +58,67 @@ final class Prefs {
     static void init(Context c) {
         app = c.getApplicationContext();
         migrateKeys();   // before anything reads the button choices
+        migrateTclChannelHome();
+        migrateHomeForNews();
+        migrateTopButtons();
         Ui.applyLanguage();   // the language picked on the TV, now that it can be read
+    }
+
+    /** One-time migration: put the integrated video apps first and remove the obsolete Stremio shelf tile. */
+    private static void migrateHomeForNews() {
+        SharedPreferences p = sp();
+        if (p.getBoolean("compactDockMigrationV3", false)) return;
+        String saved = p.getString("shelf", "org.smarttube.beta,com.stremio.one,com.globo.globotv,com.spotify.tv.android");
+        List<String> rest = new ArrayList<>();
+        if (saved != null) for (String pkg : saved.split(",")) {
+            if (pkg.isEmpty() || pkg.equals("com.stremio.one") || pkg.equals("org.smarttube.beta") || pkg.equals("com.nuvio.tv")) continue;
+            rest.add(pkg);
+        }
+        List<String> ordered = new ArrayList<>();
+        ordered.add("org.smarttube.beta");
+        ordered.add("com.nuvio.tv");
+        ordered.addAll(rest);
+        StringBuilder shelf = new StringBuilder();
+        for (String pkg : ordered) shelf.append(shelf.length() == 0 ? "" : ",").append(pkg);
+        p.edit().putString("shelf", shelf.toString()).putBoolean("weather", true)
+                .putBoolean("newsHomeMigration", true).putBoolean("compactDockMigration", true)
+                .putBoolean("compactDockMigrationV2", true).putBoolean("compactDockMigrationV3", true).apply();
+        version++;
+    }
+
+    /** Keep the three top actions useful on this TV and out of the app/input dock. */
+    private static void migrateTopButtons() {
+        SharedPreferences p = sp();
+        SharedPreferences.Editor edit = p.edit();
+        boolean changed = false;
+        if (!p.getBoolean("topButtonsProfileV1", false)) {
+            edit.putString("topButtons", "home-settings,tv-settings,account")
+                    .putBoolean("topButtonsProfileV1", true);
+            changed = true;
+        }
+        if (!p.getBoolean("topButtonsProfileV2", false)) {
+            edit.putBoolean("topButtonsProfileV2", true);
+            changed = true;
+        }
+        if (!p.getBoolean("topButtonsProfileV3", false)) {
+            String current = p.getString("topButtons", "home-settings,tv-settings,account");
+            StringBuilder cleaned = new StringBuilder();
+            for (String key : current.split(",")) {
+                if (key.trim().isEmpty() || "mirror".equals(key.trim())) continue;
+                if (cleaned.length() > 0) cleaned.append(',');
+                cleaned.append(key.trim());
+            }
+            edit.putString("topButtons", cleaned.toString()).putBoolean("topButtonsProfileV3", true);
+            changed = true;
+        }
+        if (changed) { edit.apply(); version++; }
+    }
+
+    /** The TCL Channel key is the TV's reliable return-home key while LauncherX services stay available. */
+    private static void migrateTclChannelHome() {
+        if (!RemoteKeys.TCL || sp().getBoolean("tclChannelHomeV1", false)) return;
+        setKeyApp(KEY_TCL_CHANNEL, HomeMode.PKG);
+        sp().edit().putBoolean("tclChannelHomeV1", true).apply();
     }
 
     /** The app's context in this process (null before App.onCreate). */
@@ -113,7 +173,7 @@ final class Prefs {
 
     /** "auto" (dark from sunset to sunrise), "light" or "dark". */
     static String theme() {
-        String v = sp().getString("theme", "auto");
+        String v = sp().getString("theme", "dark");
         return v.equals("light") || v.equals("dark") ? v : "auto";
     }
 
@@ -136,7 +196,7 @@ final class Prefs {
 
     // MARK: - Widgets and coins
 
-    static boolean weather() { return sp().getBoolean("weather", true); }
+    static boolean weather() { return sp().getBoolean("weather", false); }
     static void setWeather(boolean on) { put("weather", on); }
 
     static boolean quotes() { return sp().getBoolean("quotes", Config.SHOW_CRYPTO); }
@@ -153,7 +213,7 @@ final class Prefs {
 
     /** Packages on the home shelf, in order; null until the user edits it (then the built-in list applies). */
     static List<String> shelf() {
-        String v = sp().getString("shelf", null);
+        String v = sp().getString("shelf", "org.smarttube.beta,com.nuvio.tv,com.globo.globotv,com.spotify.tv.android");
         if (v == null) return null;
         List<String> out = new ArrayList<>();
         for (String p : v.split(",")) if (!p.isEmpty()) out.add(p);
@@ -193,7 +253,7 @@ final class Prefs {
             case KEY_NETFLIX: case KEY_STEM_NETFLIX: return "com.netflix.ninja";
             case KEY_YOUTUBE: return "com.google.android.youtube.tv";
             case KEY_PRIME: return "com.amazon.amazonvideo.livingroom";
-            case KEY_TCL_CHANNEL: return "";
+            case KEY_TCL_CHANNEL: return HomeMode.PKG;
             case KEY_MI: return HomeMode.PKG;   // our home screen: the remote has no other Home button
             default: return "";
         }

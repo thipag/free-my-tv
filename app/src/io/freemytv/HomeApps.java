@@ -54,7 +54,8 @@ import java.util.regex.Pattern;
 final class HomeApps {
     private HomeApps() {}
 
-    static final int APP = 0, LIVE_TV = 1, INPUT = 2, ALL_APPS = 3, SETTINGS = 4, ANDROID_SETTINGS = 5, DEVICE = 6;
+    static final int APP = 0, LIVE_TV = 1, INPUT = 2, ALL_APPS = 3, SETTINGS = 4, ANDROID_SETTINGS = 5, DEVICE = 6,
+            ACCOUNT_SETTINGS = 8;
     /** The "HDMI Inputs" button: opens the bottom drawer on the inputs (the home screen handles it). */
     static final int INPUTS = 7;
     /** Image size of each card (16:9; on screen it shows up to ~330 px wide). */
@@ -200,11 +201,12 @@ final class HomeApps {
 
     // MARK: - Top buttons (the round ones at the top right)
 
-    static final String TOP_LIVE = "live", TOP_INPUTS = "inputs", TOP_SETTINGS = "settings";
-    static final List<String> TOP_DEFAULT = Collections.unmodifiableList(java.util.Arrays.asList(TOP_LIVE, TOP_INPUTS, TOP_SETTINGS));
+    static final String TOP_HOME_SETTINGS = "home-settings", TOP_TV_SETTINGS = "tv-settings", TOP_ACCOUNT = "account", TOP_MIRROR = "mirror";
+    static final List<String> TOP_DEFAULT = Collections.unmodifiableList(java.util.Arrays.asList(
+            TOP_HOME_SETTINGS, TOP_TV_SETTINGS));
     static final int MAX_TOP = TOP_DEFAULT.size();
 
-    /** The keys of the top buttons, in order (Settings > Top Buttons; by default Live TV, HDMI Inputs, Settings). */
+    /** The keys of the top buttons, in order (Home Settings, TV Settings and Google account). */
     static List<String> topButtonKeys() {
         List<String> saved = Prefs.topButtons();
         if (saved == null) return TOP_DEFAULT;
@@ -222,9 +224,10 @@ final class HomeApps {
 
     private static Item topButton(String key) {
         switch (key) {
-            case TOP_LIVE: return action(LIVE_TV, TOP_LIVE, Ui.tr("light|Live TV"), "live_tv");
-            case TOP_INPUTS: return action(INPUTS, TOP_INPUTS, Ui.tr("HDMI Inputs"), "hdmi");
-            default: return action(SETTINGS, TOP_SETTINGS, Ui.tr("light|Settings"), "settings");
+            case TOP_HOME_SETTINGS: return action(SETTINGS, TOP_HOME_SETTINGS, Ui.tr("Home Settings"), "settings");
+            case TOP_TV_SETTINGS: return action(ANDROID_SETTINGS, TOP_TV_SETTINGS, Ui.tr("TV Settings"), "tv_settings");
+            case TOP_ACCOUNT: return action(ACCOUNT_SETTINGS, TOP_ACCOUNT, Ui.tr("Google account"), "account");
+            default: return action(ACCOUNT_SETTINGS, TOP_ACCOUNT, Ui.tr("Google account"), "account");
         }
     }
 
@@ -244,6 +247,24 @@ final class HomeApps {
         items.addAll(inputs(c));
         items.add(shortcut(ALL_APPS, "all", Ui.tr("All Apps"), "apps"));
         return items;
+    }
+
+    /** Compact home dock: apps, Live TV, the two named console inputs, and All Apps. */
+    static List<Item> homeShortcuts(Context c) {
+        List<Item> out = new ArrayList<>();
+        if (liveTv(c) != null) out.add(special(c, LIVE_TV, "home-live-tv", Ui.tr("Live TV"), "tv"));
+        for (Item input : inputs(c, true)) {
+            if ("1".equals(input.number)) {
+                input.key = "home-ps5"; input.label = "PlayStation 5 Pro"; input.symbol = "playstation";
+            } else if ("2".equals(input.number)) {
+                input.key = "home-switch2"; input.label = "Nintendo Switch 2"; input.symbol = "nintendo_switch";
+            } else continue;
+            input.tile = "2".equals(input.number) ? joyConsTile(input.key)
+                    : symbolTile(c, input.key, input.symbol);
+            out.add(input);
+        }
+        out.add(special(c, ALL_APPS, "home-all-apps", Ui.tr("All Apps"), "apps"));
+        return out;
     }
 
     private static Item shortcut(int kind, String key, String label, String symbol) {
@@ -442,6 +463,10 @@ final class HomeApps {
 
     /** Opens the item with the system zoom transition growing out of the card (the app starts opening right away). */
     static boolean open(Activity a, Item it, View from, int x, int y, int w, int h) {
+        if (it.kind == ACCOUNT_SETTINGS) {
+            HomeMode.openLauncherProfile(a);
+            return true;
+        }
         Intent intent, plain = null;   // plain: the app's own home, when it won't take the title's address
         switch (it.kind) {
             case APP:
@@ -463,8 +488,9 @@ final class HomeApps {
                 intent = new Intent().setComponent(new ComponentName(a, SettingsActivity.class));
                 break;
             case ANDROID_SETTINGS:
-                intent = new Intent(Settings.ACTION_SETTINGS);
+                intent = new Intent(Settings.ACTION_SETTINGS).setPackage("com.android.tv.settings");
                 break;
+            case ACCOUNT_SETTINGS: return false;
             case DEVICE:
                 // A fresh task: else Back walks through whatever the maker's settings app had open before
                 intent = new Intent(it.intent).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK);
@@ -931,6 +957,39 @@ final class HomeApps {
         if (TILES.containsKey(key)) return TILES.get(key);
         Bitmap b = darkTile();
         Symbols.draw(c, new Canvas(b), symbol, TILE_W / 2f, TILE_H / 2f, TILE_H * 0.36f, 0xF2FFFFFF);
+        b.setHasMipMap(true);
+        TILES.put(key, b);
+        return b;
+    }
+
+    private static synchronized Bitmap homeIcon(Context c, String key, String asset) {
+        if (TILES.containsKey(key)) return TILES.get(key);
+        Bitmap b = null;
+        try (InputStream in = c.getAssets().open(asset)) { b = BitmapFactory.decodeStream(in); }
+        catch (IOException ignored) { }
+        if (b == null) b = darkTile();
+        b.setHasMipMap(true);
+        TILES.put(key, b);
+        return b;
+    }
+
+    /** Two Joy-Con silhouettes only; the dock label already names the console. */
+    private static synchronized Bitmap joyConsTile(String key) {
+        if (TILES.containsKey(key)) return TILES.get(key);
+        Bitmap b = darkTile();
+        Canvas c = new Canvas(b);
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        float top = 36, bottom = 180;
+        RectF left = new RectF(114, top, 176, bottom), right = new RectF(208, top, 270, bottom);
+        p.setColor(0xFF00A8E8); c.drawRoundRect(left, 28, 28, p);
+        p.setColor(0xFFFF454F); c.drawRoundRect(right, 28, 28, p);
+        p.setColor(0xFFEAF8FF);
+        c.drawCircle(145, 80, 7, p); c.drawCircle(145, 124, 11, p);
+        c.drawRoundRect(new RectF(132, 99, 158, 105), 3, 3, p);
+        c.drawRoundRect(new RectF(142, 89, 148, 115), 3, 3, p);
+        c.drawCircle(239, 71, 6, p); c.drawCircle(255, 87, 6, p);
+        c.drawCircle(223, 87, 6, p); c.drawCircle(239, 103, 6, p);
+        c.drawCircle(239, 143, 11, p);
         b.setHasMipMap(true);
         TILES.put(key, b);
         return b;

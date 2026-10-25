@@ -206,7 +206,7 @@ final class HomeData {
             });
         }
         boolean moved = !weatherPlace().equals(weatherFor);
-        if (!fetchingWeather && (moved || now - weatherAt > WEATHER_EVERY || now < weatherAt) && !failedRecently(weatherFailedAt, now)) {
+        if ((Prefs.weather() || Prefs.theme().equals("auto")) && !fetchingWeather && (moved || now - weatherAt > WEATHER_EVERY || now < weatherAt) && !failedRecently(weatherFailedAt, now)) {
             fetchingWeather = true;
             io.execute(() -> {
                 try {

@@ -34,6 +34,7 @@ public class HomeActivity extends Activity {
             return;
         }
         Ui.init(this);
+        HomeMode.warmLauncherDashboard(this);
         home = new HomeView(this);
         setContentView(home);
         getWindow().setBackgroundDrawable(null);
@@ -72,6 +73,16 @@ public class HomeActivity extends Activity {
     }
 
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
+        if (RemoteKeys.homeKey(event)) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0)
+                RemoteKeys.openFreeHome(this);
+            return true;
+        }
+        if (RemoteKeys.tclSettingsKey(event)) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0)
+                RemoteKeys.openTclQuickPanel(this);
+            return true;
+        }
         if (RemoteKeys.onKey(this, event)) return true;
         if (home != null && home.onKey(event)) return true;
         return super.dispatchKeyEvent(event);
