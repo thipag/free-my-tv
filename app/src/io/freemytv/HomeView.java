@@ -3223,7 +3223,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         String brand = "FreeMyTV " + Config.APP_VERSION + " · " + Config.APP_BUILD;
         Paint brandPaint = Ui.text(Ui.semibold, 21 * k, WHITE);
         Paint clockPaint = Ui.text(Ui.semibold, 27 * k, WHITE);
-        float textWidth = brandPaint.measureText(brand) + 30 * k + clockPaint.measureText(clockText);
+        clockPaint.setFontFeatureSettings("tnum");
+        float clockWidth = clockPaint.measureText("00:00:00");
+        float textWidth = brandPaint.measureText(brand) + 30 * k + clockWidth;
         float left = Math.max((MARGIN + 30) * k,
                 topRects[firstAction].left - 58 * k - textWidth);
         float right = topRects[lastAction].right + 18 * k;
