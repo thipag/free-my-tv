@@ -105,11 +105,7 @@ final class NativeFeeds {
     synchronized List<Recs.Pick> nuvioHome(Runnable onChanged) {
         changed = onChanged;
         if (!loading && (updated == 0 || System.currentTimeMillis() - updated > REFRESH_MS)) refresh();
-        List<Recs.Pick> out = new ArrayList<>(nuvio());
-        out.addAll(smartTubeContinue());
-        // Android TV preview programs expose each app's last-engagement timestamp. Sort
-        // the combined Continue Watching row newest-first, keeping provider order on ties.
-        out.sort((a, b) -> Long.compare(b.lastEngaged, a.lastEngaged));
+        List<Recs.Pick> out = nuvio();
         queueNuvioSeasonCounts(out);
         queueImages(out);
         return out;
@@ -459,8 +455,18 @@ final class NativeFeeds {
     private List<Recs.Pick> nuvio() {
         List<FeedChannel> matches = new ArrayList<>();
         for (FeedChannel f : channels) if (NUVIO.equals(f.pkg)) matches.add(f);
-        matches.sort(Comparator.comparingInt(f -> contains(f.name, "continue", "assist", "watch") ? 0 : 1));
-        return take(matches, 8);
+        List<FeedChannel> continuing = new ArrayList<>();
+        for (FeedChannel f : matches) {
+            if (contains(f.name, "continue", "assist", "watching", "history", "recent")) continuing.add(f);
+        }
+        if (!continuing.isEmpty()) matches = continuing;
+        List<Recs.Pick> out = new ArrayList<>();
+        for (FeedChannel f : matches) out.addAll(f.items);
+        // Nuvio can publish more than one continue-watching channel. Sort the full Nuvio
+        // set by last engagement before applying the row limit, so the most recently
+        // watched title cannot be pushed onto a later page by channel ordering.
+        out.sort((a, b) -> Long.compare(b.lastEngaged, a.lastEngaged));
+        return out.size() > 8 ? new ArrayList<>(out.subList(0, 8)) : out;
     }
 
     private List<Recs.Pick> smartTube() {

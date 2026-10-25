@@ -8,7 +8,7 @@ This document describes the Android/Google TV customization layer in this fork. 
 
 - A five-tab home screen: **Watch now**, **Movies**, **Shows**, **Videos for you**, and **Listen now**.
 - A compact app shelf, horizontal catalog paging, image-backed cards, and an automatic 12-second tab carousel.
-- A Continue Watching row fed by Nuvio and SmartTube. It sorts items by the latest engagement timestamp published by Android TV's preview-program provider; ties retain provider order.
+- A Nuvio-only Continue Watching row, sorted by the latest Nuvio engagement timestamp across its continue-watching channels before the eight-card limit is applied; ties retain provider order.
 - Nuvio episode details where available: season and episode, playback progress, time remaining, and the number of episodes left in the season.
 - Separate movie and series catalogs sourced from Cinemeta metadata. Opening a title uses a Nuvio deep link. Poster images are cached and pages are prefetched so later cards do not wait for sequential downloads.
 - Live weather and system-performance cards, including FPS, available memory, and free storage. The screensaver keeps its recommendation carousel and displays a solid HH:MM clock.
@@ -17,8 +17,8 @@ This document describes the Android/Google TV customization layer in this fork. 
 
 `NativeFeeds.java` reads Android TV's public `TvContract` channel and preview-program rows for the installed apps. It does not scrape private app databases or store login credentials.
 
-- **SmartTube** contributes its published recommendation and continue/history channels. Selecting a program opens it through the intent supplied by SmartTube. Feed rows refresh on a 60-second cache interval.
-- **Nuvio** contributes continue-watching programs and their published playback metadata. Selecting a program uses the Nuvio-provided intent. Season episode counts can be enriched through TMDB when a local TMDB key is configured.
+- **SmartTube** contributes its published recommendation channels to **Videos for you**. Selecting a program opens it through the intent supplied by SmartTube. Feed rows refresh on a 60-second cache interval.
+- **Nuvio** alone supplies **Continue Watching**, using its published playback metadata and last-engagement timestamps. Selecting a program uses the Nuvio-provided intent. Season episode counts can be enriched through TMDB when a local TMDB key is configured.
 - **Spotify** contributes its Android TV preview programs. Track and artist text come from those rows or the track metadata lookup; artwork and artist-name caches are local to the TV. Spotify sign-in remains inside Spotify.
 - **Movies** and **Shows** use Cinemeta's public Stremio-compatible catalogs for metadata, with poster images from Metahub. Catalog entries open in Nuvio by IMDb ID. These catalogs do not require a user account or API key.
 
