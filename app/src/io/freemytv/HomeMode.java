@@ -322,7 +322,20 @@ final class HomeMode {
             }
             others.add(one);
         }
-        if (on == current.contains(REMOTE_SERVICE)) return;
+        boolean alreadyOn = current.contains(REMOTE_SERVICE);
+        if (on == alreadyOn) {
+            if (!on) return;
+            // Android keeps the accessibility setting after an APK update but can leave the service unbound.
+            // Cycle only our component (preserving TalkBack and every other enabled service) to rebind key filtering.
+            if (others.isEmpty()) adb.shell("settings delete secure enabled_accessibility_services");
+            else adb.shell("settings put secure enabled_accessibility_services '" + String.join(":", others) + "'");
+            List<String> rebound = new ArrayList<>(others);
+            rebound.add(REMOTE_SERVICE);
+            adb.shell("settings put secure enabled_accessibility_services '" + String.join(":", rebound) + "'");
+            adb.shell("settings put secure accessibility_enabled 1");
+            AppLog.w("remote buttons service rebound");
+            return;
+        }
         List<String> list = new ArrayList<>(others);
         if (on) {
             JSONObject s = state(c);

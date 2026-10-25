@@ -3070,12 +3070,12 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         return tab == 1 || tab == 2 ? 6 : FEED_CARDS_PER_PAGE;
     }
 
-    /** Keep the visible catalog page and the next page ready before the viewer scrolls to it. */
+    /** Keep three catalog pages warm so quick horizontal browsing does not reveal empty poster slots. */
     private void prefetchCatalogPages() {
         if (tab != 1 && tab != 2) return;
         int perPage = cardsPerPage();
         int from = Math.min(feedPage * perPage, fullFeedCards.size());
-        int to = Math.min(from + perPage * 2, fullFeedCards.size());
+        int to = Math.min(from + perPage * 3, fullFeedCards.size());
         if (from < to) catalogs.prefetch(new ArrayList<>(fullFeedCards.subList(from, to)));
     }
 

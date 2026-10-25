@@ -5,6 +5,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.RectF;
 
 import java.io.IOException;
@@ -59,6 +60,24 @@ final class Symbols {
 
     /** Draws centered at (cx, cy) in the given color (lighter, translucent parts of the symbol stay lighter). */
     static void draw(Context c, Canvas canvas, String name, float cx, float cy, float pointSize, int color) {
+        if ("library_search".equals(name)) {
+            synchronized (PAINT) {
+                float u = pointSize / 24f;
+                PAINT.setColor(color); PAINT.setStyle(Paint.Style.STROKE);
+                PAINT.setStrokeWidth(Math.max(1, pointSize * 0.085f));
+                PAINT.setStrokeCap(Paint.Cap.ROUND); PAINT.setStrokeJoin(Paint.Join.ROUND);
+                Path book = new Path();
+                book.moveTo(cx, cy - 5 * u); book.cubicTo(cx - 3 * u, cy - 8 * u, cx - 7 * u, cy - 8 * u, cx - 10 * u, cy - 7 * u);
+                book.lineTo(cx - 10 * u, cy + 6 * u); book.cubicTo(cx - 6 * u, cy + 4 * u, cx - 3 * u, cy + 5 * u, cx, cy + 8 * u);
+                book.cubicTo(cx + 2 * u, cy + 5 * u, cx + 5 * u, cy + 4 * u, cx + 8 * u, cy + 5 * u);
+                canvas.drawPath(book, PAINT);
+                canvas.drawLine(cx, cy - 5 * u, cx, cy + 8 * u, PAINT);
+                canvas.drawCircle(cx + 6 * u, cy - 4 * u, 4 * u, PAINT);
+                canvas.drawLine(cx + 9 * u, cy - 1 * u, cx + 12 * u, cy + 2 * u, PAINT);
+                PAINT.setStyle(Paint.Style.FILL);
+            }
+            return;
+        }
         if ("search".equals(name)) {
             synchronized (PAINT) {
                 PAINT.setColor(color); PAINT.setStyle(Paint.Style.STROKE);

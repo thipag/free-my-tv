@@ -213,7 +213,7 @@ final class HomeApps {
     static final String TOP_HOME_SETTINGS = "home-settings", TOP_TV_SETTINGS = "tv-settings", TOP_ACCOUNT = "account",
             TOP_MIRROR = "mirror", TOP_SEARCH = "search";
     static final List<String> TOP_DEFAULT = Collections.unmodifiableList(java.util.Arrays.asList(
-            TOP_HOME_SETTINGS, TOP_TV_SETTINGS, TOP_SEARCH));
+            TOP_SEARCH, TOP_TV_SETTINGS, TOP_HOME_SETTINGS));
     static final int MAX_TOP = TOP_DEFAULT.size();
 
     /** The keys of the top buttons, in order (Home Settings and TV Settings). */
@@ -221,8 +221,7 @@ final class HomeApps {
         List<String> saved = Prefs.topButtons();
         if (saved == null) return TOP_DEFAULT;
         List<String> keys = new ArrayList<>();
-        for (String key : saved) if (TOP_DEFAULT.contains(key) && !keys.contains(key)) keys.add(key);
-        if (!keys.contains(TOP_SEARCH)) keys.add(TOP_SEARCH);
+        for (String key : TOP_DEFAULT) if (TOP_SEARCH.equals(key) || saved.contains(key)) keys.add(key);
         return keys;
     }
 
@@ -235,9 +234,9 @@ final class HomeApps {
 
     private static Item topButton(String key) {
         switch (key) {
-            case TOP_HOME_SETTINGS: return action(SETTINGS, TOP_HOME_SETTINGS, Ui.tr("Home Settings"), "settings");
-            case TOP_TV_SETTINGS: return action(ANDROID_SETTINGS, TOP_TV_SETTINGS, Ui.tr("TV Settings"), "tv_settings");
-            case TOP_SEARCH: return action(VOICE_SEARCH, TOP_SEARCH, Ui.tr("Search"), "search");
+            case TOP_HOME_SETTINGS: return action(SETTINGS, TOP_HOME_SETTINGS, Ui.tr("Home Settings"), "tv");
+            case TOP_TV_SETTINGS: return action(ANDROID_SETTINGS, TOP_TV_SETTINGS, Ui.tr("TV Settings"), "settings");
+            case TOP_SEARCH: return action(VOICE_SEARCH, TOP_SEARCH, Ui.tr("Search"), "library_search");
             case TOP_ACCOUNT: return action(ACCOUNT_SETTINGS, TOP_ACCOUNT, Ui.tr("Google account"), "account");
             default: return action(ACCOUNT_SETTINGS, TOP_ACCOUNT, Ui.tr("Google account"), "account");
         }
